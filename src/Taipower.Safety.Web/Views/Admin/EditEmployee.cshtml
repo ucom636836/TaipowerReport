@@ -1,0 +1,93 @@
+@model Taipower.Safety.Web.Controllers.EmployeeEditModel
+@{ ViewData["Title"] = Model.IsNew ? "新增人員" : "編輯人員"; }
+<h1 class="h4 mb-3">@ViewData["Title"]</h1>
+<form asp-action="EditEmployee" method="post" class="row g-3 col-lg-8">
+    <input type="hidden" asp-for="IsNew" />
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+    <div class="col-md-4">
+        <label asp-for="EmployeeId" class="form-label">員工代號</label>
+        @if (Model.IsNew) { <input asp-for="EmployeeId" class="form-control" maxlength="6" /> }
+        else { <input asp-for="EmployeeId" class="form-control" readonly /> }
+        <span asp-validation-for="EmployeeId" class="text-danger small"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Name" class="form-label">姓名</label>
+        <input asp-for="Name" class="form-control" maxlength="20" />
+        <span asp-validation-for="Name" class="text-danger small"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Email" class="form-label">Email</label>
+        <input asp-for="Email" class="form-control" />
+        <span asp-validation-for="Email" class="text-danger small"></span>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="GroupId" class="form-label">組別</label>
+        <select asp-for="GroupId" class="form-select" id="GroupId">
+            <option value="">(未設定)</option>
+            @foreach (var g in Model.Groups) { <option value="@g.GroupId">@g.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="SectionCode" class="form-label">課別</label>
+        <select asp-for="SectionCode" class="form-select" id="SectionCode">
+            <option value="">(未設定)</option>
+            @foreach (var s in Model.Sections) { <option value="@s.SectionCode" data-group="@s.GroupId">@s.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="RankId" class="form-label">職務</label>
+        <select asp-for="RankId" class="form-select">
+            <option value="">(未設定)</option>
+            @foreach (var r in Model.Ranks) { <option value="@r.RankId">@r.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="RoleId" class="form-label">角色</label>
+        <select asp-for="RoleId" class="form-select">
+            <option value="">(未設定)</option>
+            @foreach (var r in Model.Roles) { <option value="@r.RoleId">@r.Name</option> }
+        </select>
+    </div>
+    <div class="col-12 form-check ms-2">
+        <input asp-for="IsActive" class="form-check-input" />
+        <label asp-for="IsActive" class="form-check-label">在職 (取消勾選即停用，停用者無法登入亦不會被指派)</label>
+    </div>
+    <fieldset class="col-12 border rounded p-3">
+        <legend class="h6 float-none w-auto px-2">登入帳號</legend>
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label asp-for="Account" class="form-label">帳號</label>
+                @if (Model.HasAccount) { <input asp-for="Account" class="form-control" readonly /> }
+                else { <input asp-for="Account" class="form-control" placeholder="不填則不建立帳號" /> }
+                <span asp-validation-for="Account" class="text-danger small"></span>
+            </div>
+            <div class="col-md-6">
+                <label asp-for="NewPassword" class="form-label">@(Model.HasAccount ? "重設密碼 (不填則不變更)" : "初始密碼")</label>
+                <input asp-for="NewPassword" type="password" class="form-control" autocomplete="new-password" />
+                <span asp-validation-for="NewPassword" class="text-danger small"></span>
+            </div>
+        </div>
+    </fieldset>
+    <div class="col-12">
+        <button type="submit" class="btn btn-primary">儲存</button>
+        <a asp-action="Employees" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>
+@section Scripts {
+<script>
+    // Only show sections that belong to the chosen group.
+    (function () {
+        var group = document.getElementById('GroupId'), section = document.getElementById('SectionCode');
+        function filter() {
+            Array.prototype.forEach.call(section.options, function (o) {
+                if (!o.value) return;
+                var show = o.getAttribute('data-group') === group.value;
+                o.hidden = !show;
+                if (!show && o.selected) section.value = '';
+            });
+        }
+        group.addEventListener('change', filter);
+        filter();
+    })();
+</script>
+}

@@ -1,0 +1,56 @@
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Web.Models
+@model (string Prefix, string Title, IEnumerable<Pr1ItemInput> Items, IReadOnlyList<Hazard> Hazards, bool IsCon)
+@{
+    var rows = Model.Items.ToList();
+    if (rows.Count == 0) rows.Add(new Pr1ItemInput());
+}
+<fieldset class="border rounded p-3 mb-3">
+    <legend class="h6 float-none w-auto px-2">@Model.Title</legend>
+    <div data-rows="@Model.Prefix">
+        @for (var i = 0; i < rows.Count; i++)
+        {
+            <div class="row g-2 mb-2" data-row>
+                <div class="@(Model.IsCon ? "col-md-6" : "col-md-11")">
+                    <input name="@(Model.Prefix)[@i].Description" value="@rows[i].Description" class="form-control" placeholder="@Model.Title 敘述" />
+                </div>
+                @if (Model.IsCon)
+                {
+                    <div class="col-md-3">
+                        <select name="@(Model.Prefix)[@i].HazardId" class="form-select" aria-label="危害類型">
+                            <option value="">危害類型</option>
+                            @foreach (var h in Model.Hazards) { <option value="@h.HazardId" selected="@(h.HazardId == rows[i].HazardId)">@h.Name</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input name="@(Model.Prefix)[@i].HazardLabel" value="@rows[i].HazardLabel" class="form-control" placeholder="缺失說明" />
+                    </div>
+                }
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('[data-row]').remove()">×</button>
+                </div>
+            </div>
+        }
+        <template>
+            <div class="row g-2 mb-2" data-row>
+                <div class="@(Model.IsCon ? "col-md-6" : "col-md-11")">
+                    <input name="@(Model.Prefix)[__i__].Description" class="form-control" placeholder="@Model.Title 敘述" />
+                </div>
+                @if (Model.IsCon)
+                {
+                    <div class="col-md-3">
+                        <select name="@(Model.Prefix)[__i__].HazardId" class="form-select" aria-label="危害類型">
+                            <option value="">危害類型</option>
+                            @foreach (var h in Model.Hazards) { <option value="@h.HazardId">@h.Name</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-2"><input name="@(Model.Prefix)[__i__].HazardLabel" class="form-control" placeholder="缺失說明" /></div>
+                }
+                <div class="col-md-1 text-end">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="this.closest('[data-row]').remove()">×</button>
+                </div>
+            </div>
+        </template>
+    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-add-row="@Model.Prefix">新增一列</button>
+</fieldset>

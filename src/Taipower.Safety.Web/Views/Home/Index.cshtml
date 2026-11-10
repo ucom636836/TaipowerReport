@@ -1,0 +1,29 @@
+@using Taipower.Safety.Core.Forms.Pr1
+@using Taipower.Safety.Web.Models
+@model IReadOnlyList<Pr1InboxRow>
+@{ ViewData["Title"] = "待辦事項"; }
+<h1 class="h4 mb-3">待辦事項</h1>
+@if (Model.Count == 0)
+{
+    <div class="alert alert-light border">目前沒有待您處理的工安巡查紀錄表。</div>
+}
+else
+{
+    <table class="table table-hover align-middle">
+        <thead><tr><th>單號</th><th>目前關卡</th><th>巡查日期</th><th>工程</th><th>承攬商</th><th>巡查領隊</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            <tr>
+                <td>@(r.FormNumber[..^1])@r.Revision</td>
+                <td><span class="badge bg-info text-dark">@Pr1Display.StepName(r.Step, r.Status)</span></td>
+                <td>@r.PatrolDate.ToString("yyyy-MM-dd")</td>
+                <td>@r.ProjectName</td>
+                <td>@r.ContractorName</td>
+                <td>@r.LeaderName</td>
+                <td><a asp-controller="Pr1" asp-action="Form" asp-route-id="@r.FormId" class="btn btn-sm btn-primary">處理</a></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

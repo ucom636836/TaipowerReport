@@ -1,0 +1,43 @@
+using Taipower.Safety.Core.Org;
+
+namespace Taipower.Safety.Core.Forms.Pr1;
+
+/// <summary>把流程引擎決定的 <see cref="AssigneeRule"/> 解析成實際員工。</summary>
+public interface IAssigneeResolver
+{
+    /// <summary>
+    /// 解析下一關領單人。<paramref name="specificPersonId"/> 用於派單 (SpecificPerson)。
+    /// 回傳 null 代表查無合適人員 (呼叫端須擋下並提示)。
+    /// </summary>
+    Task<Employee?> ResolveAsync(Pr1Form form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default);
+
+    /// <summary>
+    /// C6 長官鏈：依目前位置與去重規則，算出下一位批示者與其對應關卡位置。
+    /// 領隊同意結案 / 副處長批示後呼叫；可能因去重而跳過某一層直接到處長。
+    /// </summary>
+    Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(Pr1Form form, CancellationToken ct = default);
+}
+
+public interface IPr1Repository
+{
+    Task<string> NextFormNumberAsync(string patrolType, DateTime date, CancellationToken ct = default);
+    Task<long> CreateAsync(Pr1Form form, string actorTitle, CancellationToken ct = default);
+    Task<Pr1Form?> GetAsync(long formId, CancellationToken ct = default);
+    Task<Pr1Form?> GetByNumberAsync(string formNumber, CancellationToken ct = default);
+    Task ApplyTransitionAsync(Pr1Form form, Pr1Transition transition, string actorId, string actorTitle, string? comment, CancellationToken ct = default);
+    Task<IReadOnlyList<Pr1InboxRow>> GetInboxAsync(string employeeId, CancellationToken ct = default);
+    Task<IReadOnlyList<Pr1InboxRow>> SearchAsync(Pr1SearchQuery query, string employeeId, bool allScopes, CancellationToken ct = default);
+    Task<IReadOnlyList<WorkflowHistoryRow>> GetHistoryAsync(long formId, CancellationToken ct = default);
+}
+
+public sealed class Pr1SearchQuery
+{
+    public int? ProjectId { get; set; }
+    public int? ContractorId { get; set; }
+    public string? LeaderId { get; set; }
+    public DateTime? From { get; set; }
+    public DateTime? To { get; set; }
+}
+
+public sealed record WorkflowHistoryRow(
+    DateTime OccurredAt, string? ActorTitle, string Action, string? FromStep, string ToStep, string? Comment);

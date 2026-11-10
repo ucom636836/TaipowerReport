@@ -1,0 +1,26 @@
+@model Taipower.Safety.Web.Controllers.LoginInput
+@{ ViewData["Title"] = "登入"; }
+<div class="row justify-content-center mt-5">
+    <div class="col-sm-8 col-md-5 col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h4 mb-4 text-center">工安表單系統登入</h1>
+                <form asp-action="Login" method="post">
+                    <input type="hidden" asp-for="ReturnUrl" />
+                    <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+                    <div class="mb-3">
+                        <label asp-for="Account" class="form-label">帳號</label>
+                        <input asp-for="Account" class="form-control" autocomplete="username" autofocus />
+                        <span asp-validation-for="Account" class="text-danger small"></span>
+                    </div>
+                    <div class="mb-4">
+                        <label asp-for="Password" class="form-label">密碼</label>
+                        <input asp-for="Password" type="password" class="form-control" autocomplete="current-password" />
+                        <span asp-validation-for="Password" class="text-danger small"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">登入</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

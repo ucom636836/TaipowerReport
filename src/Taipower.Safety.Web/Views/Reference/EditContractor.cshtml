@@ -1,0 +1,32 @@
+@model Taipower.Safety.Core.Reference.Contractor
+@{ ViewData["Title"] = Model.ContractorId == 0 ? "新增承攬商" : "編輯承攬商"; }
+<h1 class="h4 mb-3">@ViewData["Title"]</h1>
+<form asp-action="EditContractor" method="post" class="row g-3 col-lg-8">
+    <input type="hidden" asp-for="ContractorId" />
+    <div class="col-md-8">
+        <label asp-for="Name" class="form-label">承攬商名稱</label>
+        <input asp-for="Name" class="form-control" maxlength="50" />
+        <span asp-validation-for="Name" class="text-danger small"></span>
+    </div>
+    <div class="col-md-4 form-check mt-5 ps-5">
+        <input asp-for="IsActive" class="form-check-input" />
+        <label asp-for="IsActive" class="form-check-label">啟用</label>
+    </div>
+    <fieldset class="col-12">
+        <legend class="form-label fs-6">聯絡人 (改善通知信收件者，Email 空白的列不儲存)</legend>
+        @for (var i = 0; i < Model.Contacts.Count; i++)
+        {
+            <div class="row g-2 mb-2">
+                <div class="col-md-4"><input asp-for="Contacts[i].Name" class="form-control" placeholder="姓名" maxlength="30" /></div>
+                <div class="col-md-8">
+                    <input asp-for="Contacts[i].Email" class="form-control" placeholder="Email" />
+                    <span asp-validation-for="Contacts[i].Email" class="text-danger small"></span>
+                </div>
+            </div>
+        }
+    </fieldset>
+    <div class="col-12">
+        <button class="btn btn-primary">儲存</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>

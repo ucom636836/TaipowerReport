@@ -1,0 +1,31 @@
+@model Taipower.Safety.Web.Controllers.RankRolePageModel
+@{ ViewData["Title"] = "職務角色維護"; }
+<h1 class="h4 mb-3">職務角色維護</h1>
+<div class="alert alert-info small">職務代碼 1~5 (處長、副處長、經理、課長、經辦) 與角色代碼 3 (登記桌)、6 (巡查領隊)、9 (系統管理員) 由簽核流程使用，請勿改變其意義。</div>
+<div class="row g-4">
+    <div class="col-lg-6">
+        <h2 class="h6">職務</h2>
+        <table class="table table-sm table-striped">
+            <thead><tr><th>代碼</th><th>名稱</th><th>層級</th></tr></thead>
+            <tbody>@foreach (var r in Model.Ranks) { <tr><td>@r.RankId</td><td>@r.Name</td><td>@r.Level</td></tr> }</tbody>
+        </table>
+        <form asp-action="SaveRank" method="post" class="row g-2 border rounded p-2">
+            <div class="col-3"><input name="rankId" type="number" min="1" class="form-control form-control-sm" placeholder="代碼" required /></div>
+            <div class="col-5"><input name="name" class="form-control form-control-sm" placeholder="名稱" maxlength="20" required /></div>
+            <div class="col-4"><input name="level" type="number" class="form-control form-control-sm" placeholder="層級" required /></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary">新增 / 更新職務</button></div>
+        </form>
+    </div>
+    <div class="col-lg-6">
+        <h2 class="h6">角色</h2>
+        <table class="table table-sm table-striped">
+            <thead><tr><th>代碼</th><th>名稱</th></tr></thead>
+            <tbody>@foreach (var r in Model.Roles) { <tr><td>@r.RoleId</td><td>@r.Name</td></tr> }</tbody>
+        </table>
+        <form asp-action="SaveRole" method="post" class="row g-2 border rounded p-2">
+            <div class="col-3"><input name="roleId" type="number" min="1" class="form-control form-control-sm" placeholder="代碼" required /></div>
+            <div class="col-9"><input name="name" class="form-control form-control-sm" placeholder="名稱" maxlength="20" required /></div>
+            <div class="col-12"><button class="btn btn-sm btn-primary">新增 / 更新角色</button></div>
+        </form>
+    </div>
+</div>

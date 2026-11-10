@@ -1,0 +1,89 @@
+@using Taipower.Safety.Core.Org
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Web.Models
+@model Taipower.Safety.Web.Models.Pr1CreateViewModel
+@{
+    ViewData["Title"] = "工安巡查紀錄表 - 開單";
+    var patrolTypes = (List<SelectListItem>)ViewBag.PatrolTypes;
+    var projects = (IReadOnlyList<EngineeringProject>)ViewBag.Projects;
+    var contractors = (IReadOnlyList<Contractor>)ViewBag.Contractors;
+    var groups = (IReadOnlyList<OrgGroup>)ViewBag.Groups;
+    var leaders = (IReadOnlyList<Employee>)ViewBag.Leaders;
+    var hazards = (IReadOnlyList<Hazard>)ViewBag.Hazards;
+}
+<h1 class="h4 mb-3">工安巡查紀錄表 - 開單</h1>
+<form asp-action="Create" method="post">
+    <div asp-validation-summary="All" class="alert alert-danger py-2" role="alert"></div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <label asp-for="PatrolType" class="form-label">巡查類別</label>
+            <select asp-for="PatrolType" asp-items="patrolTypes" class="form-select"></select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="PatrolDate" class="form-label">巡查日期</label>
+            <input asp-for="PatrolDate" type="date" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ProjectId" class="form-label">受查工程</label>
+            <select asp-for="ProjectId" class="form-select" id="ProjectId">
+                <option value="">請選擇</option>
+                @foreach (var p in projects) { <option value="@p.ProjectId">@p.ProjectNumber @p.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ContractorId" class="form-label">承攬商</label>
+            <select asp-for="ContractorId" class="form-select" id="ContractorId">
+                <option value="">請先選工程</option>
+                @foreach (var c in contractors) { <option value="@c.ContractorId">@c.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="LeaderId" class="form-label">巡查領隊</label>
+            <select asp-for="LeaderId" class="form-select">
+                <option value="">請選擇</option>
+                @foreach (var l in leaders) { <option value="@l.EmployeeId">@l.Name（@l.RankName）</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ImproveGroupId" class="form-label">建議督促組別（選填）</label>
+            <select asp-for="ImproveGroupId" class="form-select">
+                <option value="">（不指定）</option>
+                @foreach (var g in groups) { <option value="@g.GroupId">@g.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label asp-for="TeamMembers" class="form-label">巡查人員</label>
+            <input asp-for="TeamMembers" class="form-control" maxlength="200" />
+        </div>
+    </div>
+
+    @await Html.PartialAsync("_Pr1ItemEditor", ("Pros", "優點", (IEnumerable<Pr1ItemInput>)Model.Pros, hazards, false))
+    @await Html.PartialAsync("_Pr1ItemEditor", ("Cons", "缺點", (IEnumerable<Pr1ItemInput>)Model.Cons, hazards, true))
+    @await Html.PartialAsync("_Pr1ItemEditor", ("Recommends", "建議改善事項", (IEnumerable<Pr1ItemInput>)Model.Recommends, hazards, false))
+
+    <button type="submit" class="btn btn-primary">送出建單</button>
+    <a asp-action="Index" class="btn btn-outline-secondary">取消</a>
+</form>
+@section Scripts {
+<script>
+    // 工程變更時，載入該工程的承攬商。
+    document.getElementById('ProjectId').addEventListener('change', async function () {
+        var sel = document.getElementById('ContractorId');
+        sel.innerHTML = '<option value="">載入中…</option>';
+        if (!this.value) { sel.innerHTML = '<option value="">請先選工程</option>'; return; }
+        var res = await fetch('@Url.Action("Contractors")?projectId=' + encodeURIComponent(this.value));
+        var list = await res.json();
+        sel.innerHTML = '<option value="">請選擇</option>' + list.map(c => '<option value="' + c.contractorId + '">' + c.name + '</option>').join('');
+    });
+    // 動態新增項目列。
+    document.querySelectorAll('[data-add-row]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var body = document.querySelector('[data-rows="' + btn.dataset.addRow + '"]');
+            var tpl = body.querySelector('template').content.cloneNode(true);
+            var idx = body.querySelectorAll('[data-row]').length;
+            tpl.querySelectorAll('[name]').forEach(function (el) { el.name = el.name.replace('__i__', idx); });
+            body.appendChild(tpl);
+        });
+    });
+</script>
+}

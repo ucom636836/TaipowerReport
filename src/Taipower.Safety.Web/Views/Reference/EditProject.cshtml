@@ -1,0 +1,51 @@
+@model Taipower.Safety.Core.Reference.EngineeringProject
+@{
+    ViewData["Title"] = Model.ProjectId == 0 ? "新增工程" : "編輯工程";
+    var contractors = (IReadOnlyList<Taipower.Safety.Core.Reference.Contractor>)ViewBag.Contractors;
+    var versions = (IReadOnlyList<Taipower.Safety.Core.Reference.PenaltyVersion>)ViewBag.PenaltyVersions;
+}
+<h1 class="h4 mb-3">@ViewData["Title"]</h1>
+<form asp-action="EditProject" method="post" class="row g-3 col-lg-8">
+    <input type="hidden" asp-for="ProjectId" />
+    <div class="col-md-4">
+        <label asp-for="ProjectNumber" class="form-label">工程編號</label>
+        <input asp-for="ProjectNumber" class="form-control" maxlength="20" />
+        <span asp-validation-for="ProjectNumber" class="text-danger small"></span>
+    </div>
+    <div class="col-md-8">
+        <label asp-for="Name" class="form-label">工程名稱</label>
+        <input asp-for="Name" class="form-control" maxlength="100" />
+        <span asp-validation-for="Name" class="text-danger small"></span>
+    </div>
+    <div class="col-md-4">
+        <label asp-for="UnitPeriod" class="form-label">機組/期別</label>
+        <input asp-for="UnitPeriod" class="form-control" maxlength="10" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="PenaltyVersionId" class="form-label">罰款版本</label>
+        <select asp-for="PenaltyVersionId" class="form-select">
+            <option value="">(未設定)</option>
+            @foreach (var v in versions) { <option value="@v.PenaltyVersionId">@v.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-4 form-check mt-5 ps-5">
+        <input asp-for="IsActive" class="form-check-input" />
+        <label asp-for="IsActive" class="form-check-label">啟用</label>
+    </div>
+    <fieldset class="col-12">
+        <legend class="form-label fs-6">承攬商</legend>
+        <div class="row">
+        @foreach (var c in contractors)
+        {
+            <div class="col-md-4 form-check ms-3">
+                <input class="form-check-input" type="checkbox" name="ContractorIds" value="@c.ContractorId" id="c@(c.ContractorId)" checked="@Model.ContractorIds.Contains(c.ContractorId)" />
+                <label class="form-check-label" for="c@(c.ContractorId)">@c.Name</label>
+            </div>
+        }
+        </div>
+    </fieldset>
+    <div class="col-12">
+        <button class="btn btn-primary">儲存</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>

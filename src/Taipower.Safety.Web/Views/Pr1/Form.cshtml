@@ -1,0 +1,131 @@
+@using Taipower.Safety.Core.Forms.Pr1
+@using Taipower.Safety.Web.Models
+@model Pr1FormViewModel
+@{
+    ViewData["Title"] = "工安巡查紀錄表 " + Model.Form.DisplayNumber;
+    var f = Model.Form;
+    bool Has(Pr1Action a) => Model.Allowed.Contains(a);
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">工安巡查紀錄表 <small class="text-muted">@f.DisplayNumber</small></h1>
+    <span class="badge bg-info text-dark fs-6">@Pr1Display.StepName(f.Step, f.Status)</span>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-2">巡查類別</dt><dd class="col-sm-4">@PatrolType.Names.GetValueOrDefault(f.PatrolType)</dd>
+    <dt class="col-sm-2">巡查日期</dt><dd class="col-sm-4">@f.PatrolDate.ToString("yyyy-MM-dd")</dd>
+    <dt class="col-sm-2">工程</dt><dd class="col-sm-4">@Model.Project?.ProjectNumber @Model.Project?.Name</dd>
+    <dt class="col-sm-2">承攬商</dt><dd class="col-sm-4">@Model.Contractor?.Name</dd>
+    <dt class="col-sm-2">督促組別</dt><dd class="col-sm-4">@Model.Groups.FirstOrDefault(g => g.GroupId == (f.InformGroupId ?? f.ImproveGroupId))?.Name</dd>
+    <dt class="col-sm-2">改善期限</dt><dd class="col-sm-4">@(f.ImproveDeadline?.ToString("yyyy-MM-dd") ?? "—")</dd>
+</dl>
+
+@foreach (var (title, items, isCon) in new[] { ("優點", Model.Pros, false), ("缺點", Model.Cons, true), ("建議改善事項", Model.Recommends, false) })
+{
+    <h2 class="h6 mt-3">@title</h2>
+    <table class="table table-sm table-bordered">
+        <thead><tr><th style="width:3rem">#</th><th>敘述</th>@if (isCon){<th>危害類型</th><th>改善/查證</th>}</tr></thead>
+        <tbody>
+        @foreach (var it in items)
+        {
+            <tr>
+                <td>@it.Ordinal</td>
+                <td>@it.Description</td>
+                @if (isCon)
+                {
+                    <td>@it.HazardLabel</td>
+                    <td>
+                        @if (it.Improved == true) { <span class="text-success">改善完成</span> }
+                        else if (it.Improved == false) { <span class="text-danger">未改善：@it.NotImprovedReason</span> }
+                        @if (it.Verified == true) { <span class="badge bg-success">查證通過</span> }
+                        else if (it.Verified == false) { <span class="badge bg-danger">查證未過</span> }
+                    </td>
+                }
+            </tr>
+        }
+        @if (!items.Any()) { <tr><td colspan="@(isCon ? 4 : 2)" class="text-muted">無</td></tr> }
+        </tbody>
+    </table>
+}
+
+@if (Model.CanAct)
+{
+    <div class="card my-4">
+        <div class="card-header">簽核處理</div>
+        <div class="card-body">
+            <form asp-action="Act" method="post" class="row g-3">
+                <input type="hidden" name="FormId" value="@f.FormId" />
+
+                @if (Has(Pr1Action.AssignChief) || Has(Pr1Action.AssignOfficer))
+                {
+                    <div class="col-md-6">
+                        <label class="form-label">指派對象（員工代號）</label>
+                        <input name="AssigneeId" class="form-control" placeholder="例如 610826" />
+                    </div>
+                }
+                @if (f.Step.Stage == Stage.SafetyReview && f.Step.Position == Position.Officer)
+                {
+                    <div class="col-md-4">
+                        <label class="form-label">督促組別</label>
+                        <select name="InformGroupId" class="form-select">
+                            <option value="">請選擇</option>
+                            @foreach (var g in Model.Groups) { <option value="@g.GroupId" selected="@(g.GroupId == f.InformGroupId)">@g.Name</option> }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">改善期限</label>
+                        <input name="ImproveDeadline" type="date" class="form-control" />
+                    </div>
+                    <div class="col-12 form-check ms-2">
+                        <input type="checkbox" name="IsJump" value="true" class="form-check-input" id="jump" />
+                        <label class="form-check-label" for="jump">跳關直送經理（略過課長）</label>
+                    </div>
+                }
+                @if (f.Step.Position == Position.Chief && f.Step.Stage != Stage.Approval)
+                {
+                    <div class="col-12 form-check ms-2">
+                        <input type="checkbox" name="IsProxy" value="true" class="form-check-input" id="proxy" />
+                        <label class="form-check-label" for="proxy">代理經理簽核（送他課課長）</label>
+                    </div>
+                }
+                @if (Has(Pr1Action.CloseDecision))
+                {
+                    <div class="col-12">
+                        <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="AgreeClose" value="true" id="ac1" checked /><label class="form-check-label" for="ac1">同意結案</label></div>
+                        <div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="AgreeClose" value="false" id="ac0" /><label class="form-check-label" for="ac0">不同意結案（退回經辦組）</label></div>
+                    </div>
+                }
+
+                <div class="col-12">
+                    <label class="form-label">意見 / 批示</label>
+                    <textarea name="Comment" class="form-control" rows="2" maxlength="1000"></textarea>
+                </div>
+                <div class="col-12">
+                    @foreach (var a in Model.Allowed.Where(a => a != Pr1Action.Withdraw && a != Pr1Action.NotifyContractor))
+                    {
+                        var cls = a is Pr1Action.Approve ? "btn-success"
+                            : a.ToString().StartsWith("Return") || a is Pr1Action.Reject ? "btn-outline-danger"
+                            : "btn-primary";
+                        <button type="submit" name="Action" value="@a" class="btn @cls me-2 mb-2">@Pr1Display.ActionName(a)</button>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+}
+else if (f.Status == FormStatus.InProgress)
+{
+    <div class="alert alert-secondary">此單目前由 <strong>@(f.PendingRecipientId ?? "—")</strong> 處理中，您僅能檢視。</div>
+}
+
+<h2 class="h6 mt-4">簽核歷程</h2>
+<table class="table table-sm table-striped small">
+    <thead><tr><th>時間</th><th>處理人</th><th>動作</th><th>意見</th></tr></thead>
+    <tbody>
+    @foreach (var h in Model.History)
+    {
+        <tr><td class="text-nowrap">@h.OccurredAt.ToString("yyyy-MM-dd HH:mm")</td><td>@h.ActorTitle</td><td>@h.Action</td><td>@h.Comment</td></tr>
+    }
+    </tbody>
+</table>
+<a asp-action="Index" class="btn btn-outline-secondary btn-sm">回查詢</a>

@@ -1,0 +1,31 @@
+@model Taipower.Safety.Web.Controllers.PermissionPageModel
+@{ ViewData["Title"] = "角色權限設定"; }
+<h1 class="h4 mb-3">角色權限設定</h1>
+<form method="get" class="mb-3 col-md-4">
+    <select name="roleId" class="form-select" onchange="this.form.submit()">
+        @foreach (var r in Model.Roles) { <option value="@r.RoleId" selected="@(r.RoleId == Model.RoleId)">@r.Name</option> }
+    </select>
+</form>
+<form asp-action="SavePermissions" method="post">
+    <input type="hidden" name="roleId" value="@Model.RoleId" />
+    @foreach (var parent in Model.Features.Where(f => f.ParentId is null))
+    {
+        <fieldset class="border rounded p-3 mb-3">
+            <legend class="h6 float-none w-auto px-2">@parent.Name</legend>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="featureIds" value="@parent.FeatureId" id="f@(parent.FeatureId)" checked="@Model.Granted.Contains(parent.FeatureId)" />
+                <label class="form-check-label fw-semibold" for="f@(parent.FeatureId)">顯示「@parent.Name」選單</label>
+            </div>
+            <div class="row">
+            @foreach (var f in Model.Features.Where(x => x.ParentId == parent.FeatureId))
+            {
+                <div class="col-md-4 form-check ms-3">
+                    <input class="form-check-input" type="checkbox" name="featureIds" value="@f.FeatureId" id="f@(f.FeatureId)" checked="@Model.Granted.Contains(f.FeatureId)" />
+                    <label class="form-check-label" for="f@(f.FeatureId)">@f.Name</label>
+                </div>
+            }
+            </div>
+        </fieldset>
+    }
+    <button class="btn btn-primary">儲存</button>
+</form>

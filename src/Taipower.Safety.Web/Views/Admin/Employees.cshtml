@@ -1,0 +1,42 @@
+@model Taipower.Safety.Web.Controllers.EmployeeListModel
+@{ ViewData["Title"] = "人員資料維護"; }
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">人員資料維護</h1>
+    <a asp-action="EditEmployee" class="btn btn-primary btn-sm">新增人員</a>
+</div>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3"><input name="Keyword" value="@Model.Query.Keyword" class="form-control form-control-sm" placeholder="代號 / 姓名 / 帳號" /></div>
+    <div class="col-md-3">
+        <select name="GroupId" class="form-select form-select-sm">
+            <option value="">全部組別</option>
+            @foreach (var g in Model.Groups) { <option value="@g.GroupId" selected="@(g.GroupId == Model.Query.GroupId)">@g.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="RankId" class="form-select form-select-sm">
+            <option value="">全部職務</option>
+            @foreach (var r in Model.Ranks) { <option value="@r.RankId" selected="@(r.RankId == Model.Query.RankId)">@r.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="RoleId" class="form-select form-select-sm">
+            <option value="">全部角色</option>
+            @foreach (var r in Model.Roles) { <option value="@r.RoleId" selected="@(r.RoleId == Model.Query.RoleId)">@r.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100">查詢</button></div>
+</form>
+<table class="table table-sm table-hover align-middle">
+    <thead><tr><th>代號</th><th>姓名</th><th>組別</th><th>課別</th><th>職務</th><th>角色</th><th>Email</th><th>帳號</th><th>狀態</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var e in Model.Employees)
+    {
+        <tr class="@(e.IsActive ? "" : "text-muted")">
+            <td>@e.EmployeeId</td><td>@e.Name</td><td>@e.GroupName</td><td>@e.SectionName</td><td>@e.RankName</td><td>@e.RoleName</td>
+            <td>@e.Email</td><td>@e.Account</td><td>@(e.IsActive ? "在職" : "停用")</td>
+            <td><a asp-action="EditEmployee" asp-route-id="@e.EmployeeId" class="btn btn-link btn-sm">編輯</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+<p class="small text-muted">共 @Model.Employees.Count 筆</p>

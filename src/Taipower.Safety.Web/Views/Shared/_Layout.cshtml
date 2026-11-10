@@ -1,0 +1,91 @@
+﻿@{
+    var authed = User.Identity?.IsAuthenticated == true;
+    string Active(string controller) =>
+        string.Equals(ViewContext.RouteData.Values["controller"]?.ToString(), controller, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+}
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - 南部施工處工安表單系統</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" asp-controller="Home" asp-action="Index">南部施工處工安表單系統</a>
+        @if (authed)
+        {
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="切換選單">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link @Active("Home")" asp-controller="Home" asp-action="Index">待辦事項</a></li>
+                    @if (User.HasFeature(Features.Pr1Create) || User.HasFeature(Features.Pr1Query))
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle @Active("Pr1")" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">工安巡查紀錄表</a>
+                            <ul class="dropdown-menu">
+                                @if (User.HasFeature(Features.Pr1Create)) { <li><a class="dropdown-item" asp-controller="Pr1" asp-action="Create">開單</a></li> }
+                                @if (User.HasFeature(Features.Pr1Query)) { <li><a class="dropdown-item" asp-controller="Pr1" asp-action="Index">查詢</a></li> }
+                            </ul>
+                        </li>
+                    }
+                    @if (User.HasFeature(Features.AdminOrg) || User.HasFeature(Features.AdminEmployee) || User.HasFeature(Features.AdminPermission)
+                         || User.HasFeature(Features.AdminReference) || User.HasFeature(Features.AdminAuditLog) || User.HasFeature(Features.AdminRankRole))
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle @Active("Admin")" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">系統管理</a>
+                            <ul class="dropdown-menu">
+                                @if (User.HasFeature(Features.AdminOrg)) { <li><a class="dropdown-item" asp-controller="Admin" asp-action="Org">組織維護</a></li> }
+                                @if (User.HasFeature(Features.AdminRankRole)) { <li><a class="dropdown-item" asp-controller="Admin" asp-action="RankRole">職務角色維護</a></li> }
+                                @if (User.HasFeature(Features.AdminEmployee)) { <li><a class="dropdown-item" asp-controller="Admin" asp-action="Employees">人員資料維護</a></li> }
+                                @if (User.HasFeature(Features.AdminPermission)) { <li><a class="dropdown-item" asp-controller="Admin" asp-action="Permissions">角色權限設定</a></li> }
+                                @if (User.HasFeature(Features.AdminReference)) { <li><a class="dropdown-item" asp-controller="Reference" asp-action="Index">基本資料維護</a></li> }
+                                @if (User.HasFeature(Features.AdminAuditLog)) { <li><a class="dropdown-item" asp-controller="Admin" asp-action="AuditLog">操作紀錄查詢</a></li> }
+                            </ul>
+                        </li>
+                    }
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">@User.FindFirst(AppClaims.Title)?.Value</a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" asp-controller="Account" asp-action="ChangePassword">變更密碼</a></li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li>
+                                <form asp-controller="Account" asp-action="Logout" method="post">
+                                    <button type="submit" class="dropdown-item">登出</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        }
+    </div>
+</nav>
+
+<main class="container-fluid py-3">
+    @foreach (var kind in new[] { "success", "danger", "warning" })
+    {
+        if (TempData["flash." + kind] is string msg)
+        {
+            <div class="alert alert-@kind alert-dismissible fade show" role="alert">
+                @msg
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="關閉"></button>
+            </div>
+        }
+    }
+    @RenderBody()
+</main>
+
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

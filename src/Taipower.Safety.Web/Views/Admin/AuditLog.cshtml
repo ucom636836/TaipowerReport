@@ -1,0 +1,26 @@
+@model Taipower.Safety.Core.Common.PagedResult<Taipower.Safety.Core.Common.AuditLogRow>
+@{
+    ViewData["Title"] = "操作紀錄查詢";
+    var q = (Taipower.Safety.Core.Common.AuditLogQuery)ViewBag.Query;
+}
+<h1 class="h4 mb-3">操作紀錄查詢</h1>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-2"><input type="date" name="From" value="@q.From?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" aria-label="起日" /></div>
+    <div class="col-md-2"><input type="date" name="To" value="@q.To?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" aria-label="迄日" /></div>
+    <div class="col-md-4"><input name="Keyword" value="@q.Keyword" class="form-control form-control-sm" placeholder="人員 / 功能 / 單號 / 訊息" /></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100">查詢</button></div>
+</form>
+<table class="table table-sm table-striped small">
+    <thead><tr><th>時間</th><th>人員</th><th>功能</th><th>對象</th><th>訊息</th><th>結果</th><th>IP</th></tr></thead>
+    <tbody>
+    @foreach (var r in Model.Items)
+    {
+        <tr>
+            <td class="text-nowrap">@r.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+            <td>@r.EmployeeName (@r.EmployeeId)</td><td>@r.Action</td><td>@r.Target</td><td>@r.Message</td>
+            <td>@(r.Success ? "成功" : "失敗")</td><td>@r.IpAddress</td>
+        </tr>
+    }
+    </tbody>
+</table>
+<partial name="_Pager" model="(Model.Page, Model.PageCount, Model.Total)" />
