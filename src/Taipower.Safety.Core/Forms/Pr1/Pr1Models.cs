@@ -1,3 +1,4 @@
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Core.Forms.Pr1;
 
 /// <summary>項目種類 (legacy Improve.Imp_type)。</summary>
@@ -69,12 +70,12 @@ public sealed class Attachment
 }
 
 /// <summary>一張 Pr1 單的完整狀態 (持久化模型)。</summary>
-public sealed class Pr1Form
+public sealed class Pr1Form : IWorkflowForm
 {
     public long FormId { get; set; }
     public string FormNumber { get; set; } = "";
     public int Revision { get; set; }
-    public Pr1Step Step { get; set; } = Pr1Step.Draft;
+    public WorkflowStep Step { get; set; } = WorkflowStep.Draft;
     public FormStatus Status { get; set; } = FormStatus.InProgress;
 
     // 持有/流轉
@@ -119,10 +120,35 @@ public sealed class Pr1Form
     public string DisplayNumber => Revision == 0 || FormNumber.Length == 0
         ? FormNumber
         : FormNumber[..^1] + Revision;
+
+    // IWorkflowForm：把各階段已簽核人暴露給共用的 AssigneeResolver（供退回定位）。
+    public string? OfficerOfRecord(Stage stage) => stage switch
+    {
+        Stage.SafetyReview => SafetyOfficerId,
+        Stage.Improvement => ImproveOfficerId,
+        Stage.Verification => VerifyOfficerId,
+        _ => null,
+    };
+
+    public string? ChiefOfRecord(Stage stage) => stage switch
+    {
+        Stage.SafetyReview => SafetyChiefId,
+        Stage.Improvement => ImproveChiefId,
+        Stage.Verification => VerifyChiefId,
+        _ => null,
+    };
+
+    public string? ManagerOfRecord(Stage stage) => stage switch
+    {
+        Stage.SafetyReview => SafetyManagerId,
+        Stage.Improvement => ImproveManagerId,
+        Stage.Verification => VerifyManagerId,
+        _ => null,
+    };
 }
 
 /// <summary>待辦清單一列。</summary>
 public sealed record Pr1InboxRow(
-    long FormId, string FormNumber, int Revision, Pr1Step Step, FormStatus Status,
+    long FormId, string FormNumber, int Revision, WorkflowStep Step, FormStatus Status,
     DateTime PatrolDate, string ProjectName, string ContractorName, string LeaderName,
     bool CanWithdraw, bool CanOpen);

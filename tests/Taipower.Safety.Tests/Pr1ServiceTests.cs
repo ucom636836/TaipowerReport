@@ -4,6 +4,7 @@ using Taipower.Safety.Core.Org;
 using Taipower.Safety.Core.Reference;
 using Xunit;
 
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Tests;
 
 /// <summary>
@@ -53,7 +54,7 @@ public class Pr1ServiceTests
 
         Assert.True(result.Ok, result.Error);
         var form = repo.Get(result.FormId);
-        Assert.Equal(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted), form.Step);
+        Assert.Equal(new WorkflowStep(Stage.SafetyReview, Position.Assign, Transit.Submitted), form.Step);
         Assert.Equal("MAKER", form.CreatedBy);
         Assert.Equal("DESK", form.PendingRecipientId);
         Assert.False(string.IsNullOrEmpty(form.FormNumber));
@@ -95,9 +96,9 @@ public class Pr1ServiceTests
     public async Task Act_rejects_user_who_is_not_holder_or_recipient()
     {
         var (svc, repo, _, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Assign, Transit.Submitted),
             holder: "DESK", pending: "DESK"));
-        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.AssignOfficer, null, SpecificPersonId: "OFF"),
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, WorkflowAction.AssignOfficer, null, SpecificPersonId: "OFF"),
             User("OUTSIDER"));
         Assert.False(result.Ok);
         Assert.Contains("處理人", result.Error);
@@ -107,10 +108,10 @@ public class Pr1ServiceTests
     public async Task Act_rejects_action_not_allowed_in_current_step()
     {
         var (svc, repo, _, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Officer, Transit.Working),
             holder: "OFF", pending: "OFF"));
         // 經辦關不允許「核可」
-        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, null), User("OFF"));
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, WorkflowAction.Approve, null), User("OFF"));
         Assert.False(result.Ok);
     }
 
@@ -118,10 +119,10 @@ public class Pr1ServiceTests
     public async Task Act_rejects_already_closed_form()
     {
         var (svc, repo, _, _, _) = Build();
-        var form = FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Submitted), holder: "DIR", pending: "DIR");
+        var form = FormAt(new WorkflowStep(Stage.Approval, Position.Director, Transit.Submitted), holder: "DIR", pending: "DIR");
         form.Status = FormStatus.Closed;
         repo.Seed(form);
-        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, null), User("DIR"));
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, WorkflowAction.Approve, null), User("DIR"));
         Assert.False(result.Ok);
         Assert.Contains("結案或作廢", result.Error);
     }
@@ -132,15 +133,15 @@ public class Pr1ServiceTests
     public async Task Act_assign_officer_records_officer_and_advances_step()
     {
         var (svc, repo, _, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Assign, Transit.Submitted),
             holder: "DESK", pending: "DESK"));
 
         var result = await svc.ActAsync(
-            new Pr1ActionRequest(1, Pr1Action.AssignOfficer, null, SpecificPersonId: "OFF1"), User("DESK"));
+            new Pr1ActionRequest(1, WorkflowAction.AssignOfficer, null, SpecificPersonId: "OFF1"), User("DESK"));
 
         Assert.True(result.Ok, result.Error);
         var form = repo.Get(1);
-        Assert.Equal(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Submitted), form.Step);
+        Assert.Equal(new WorkflowStep(Stage.SafetyReview, Position.Officer, Transit.Submitted), form.Step);
         Assert.Equal("OFF1", form.SafetyOfficerId);
         Assert.Equal("OFF1", form.PendingRecipientId);
     }
@@ -150,10 +151,10 @@ public class Pr1ServiceTests
     {
         var (svc, repo, resolver, _, _) = Build();
         resolver.Default = Emp("MGR", "經理");
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Officer, Transit.Working),
             holder: "OFF1", pending: "OFF1"));
 
-        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Submit, "意見", IsJump: true), User("OFF1"));
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, WorkflowAction.Submit, "意見", IsJump: true), User("OFF1"));
 
         Assert.True(result.Ok, result.Error);
         var form = repo.Get(1);
@@ -169,13 +170,13 @@ public class Pr1ServiceTests
     public async Task Act_leader_close_resolves_next_approver_and_overrides_position()
     {
         var (svc, repo, resolver, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
+        repo.Seed(FormAt(new WorkflowStep(Stage.Approval, Position.Leader, Transit.Working),
             holder: "LEAD", pending: "LEAD"));
         // 去重後下一關是「工程副處長」
         resolver.ApprovalNext = (Position.DeputyEng, Emp("DENG", "工程副處長"));
 
         var result = await svc.ActAsync(
-            new Pr1ActionRequest(1, Pr1Action.CloseDecision, null, AgreeClose: true), User("LEAD"));
+            new Pr1ActionRequest(1, WorkflowAction.CloseDecision, null, AgreeClose: true), User("LEAD"));
 
         Assert.True(result.Ok, result.Error);
         var form = repo.Get(1);
@@ -187,12 +188,12 @@ public class Pr1ServiceTests
     public async Task Act_next_approver_missing_person_fails()
     {
         var (svc, repo, resolver, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
+        repo.Seed(FormAt(new WorkflowStep(Stage.Approval, Position.Leader, Transit.Working),
             holder: "LEAD", pending: "LEAD"));
         resolver.ApprovalNext = (Position.DeputyEng, null); // 查無副處長／處長
 
         var result = await svc.ActAsync(
-            new Pr1ActionRequest(1, Pr1Action.CloseDecision, null, AgreeClose: true), User("LEAD"));
+            new Pr1ActionRequest(1, WorkflowAction.CloseDecision, null, AgreeClose: true), User("LEAD"));
 
         Assert.False(result.Ok);
         Assert.Contains("長官", result.Error);
@@ -203,10 +204,10 @@ public class Pr1ServiceTests
     {
         var (svc, repo, resolver, email, _) = Build();
         resolver.Default = Emp("DIR", "處長");
-        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Working),
+        repo.Seed(FormAt(new WorkflowStep(Stage.Approval, Position.Director, Transit.Working),
             holder: "DIR", pending: "DIR"));
 
-        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, "准"), User("DIR"));
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, WorkflowAction.Approve, "准"), User("DIR"));
 
         Assert.True(result.Ok, result.Error);
         Assert.Equal(FormStatus.Closed, repo.Get(1).Status);
@@ -219,7 +220,7 @@ public class Pr1ServiceTests
     public async Task Open_takes_over_as_holder_without_changing_stage()
     {
         var (svc, repo, _, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Submitted),
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Officer, Transit.Submitted),
             holder: "DESK", pending: "OFF1"));
 
         await svc.OpenAsync(1, User("OFF1"));
@@ -233,7 +234,7 @@ public class Pr1ServiceTests
     // ---- 項目照片 ----
 
     private static Pr1Form HolderFormWithItem() =>
-        FormAt(new Pr1Step(Stage.Improvement, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF");
+        FormAt(new WorkflowStep(Stage.Improvement, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF");
 
     [Fact]
     public async Task AddPhoto_valid_stores_file_and_records_attachment()
@@ -362,7 +363,7 @@ public class Pr1ServiceTests
     public async Task SaveItemResults_at_verification_records_verify_fields()
     {
         var (svc, repo, _, _, _) = Build();
-        repo.Seed(FormAt(new Pr1Step(Stage.Verification, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
+        repo.Seed(FormAt(new WorkflowStep(Stage.Verification, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
 
         var r = await svc.SaveItemResultsAsync(1,
             [new Pr1ItemResult(10, Improved: null, NotImprovedReason: null, ImprovedDate: null, Verified: false, VerifyReason: "尚未完成")],
@@ -388,7 +389,7 @@ public class Pr1ServiceTests
     {
         var (svc, repo, _, _, _) = Build();
         // 工安組簽註階段 (C3) 的經辦不可填改善 / 查證結果
-        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
+        repo.Seed(FormAt(new WorkflowStep(Stage.SafetyReview, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
         var r = await svc.SaveItemResultsAsync(1, [new Pr1ItemResult(10, true, null, null, null, null)], User("OFF"));
         Assert.False(r.Ok);
     }
@@ -404,7 +405,7 @@ public class Pr1ServiceTests
 
     // ---- helpers ----
 
-    private static Pr1Form FormAt(Pr1Step step, string holder, string pending) => new()
+    private static Pr1Form FormAt(WorkflowStep step, string holder, string pending) => new()
     {
         FormId = 1,
         FormNumber = "SI-1151111-01-0",
@@ -449,7 +450,7 @@ public class Pr1ServiceTests
             => Task.FromResult<Pr1Form?>(null);
 
         // 仿真實 repo：套用轉移後更新步驟 / 狀態 / 重會次數。
-        public Task ApplyTransitionAsync(Pr1Form form, Pr1Transition transition, string actorId, string actorTitle,
+        public Task ApplyTransitionAsync(Pr1Form form, WorkflowTransition transition, string actorId, string actorTitle,
             string? comment, CancellationToken ct = default)
         {
             form.Step = transition.To;
@@ -535,7 +536,7 @@ public class Pr1ServiceTests
         /// <summary>C6 下一位批示者（位置 + 人員）。</summary>
         public (Position Position, Employee? Approver)? ApprovalNext { get; set; }
 
-        public Task<Employee?> ResolveAsync(Pr1Form form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default)
+        public Task<Employee?> ResolveAsync(IWorkflowForm form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default)
             => Task.FromResult(rule switch
             {
                 AssigneeRule.None => null,
@@ -545,7 +546,7 @@ public class Pr1ServiceTests
                 _ => Default,
             });
 
-        public Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(Pr1Form form, CancellationToken ct = default)
+        public Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(IWorkflowForm form, CancellationToken ct = default)
             => Task.FromResult(ApprovalNext ?? (Position.Director, Default));
     }
 

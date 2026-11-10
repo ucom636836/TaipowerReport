@@ -1,6 +1,7 @@
 using Dapper;
 using Taipower.Safety.Core.Common;
 using Taipower.Safety.Core.Forms.Pr1;
+using Taipower.Safety.Core.Forms.Workflow;
 using Taipower.Safety.Core.Org;
 
 namespace Taipower.Safety.Infrastructure.Data;
@@ -8,22 +9,24 @@ namespace Taipower.Safety.Infrastructure.Data;
 /// <summary>
 /// 把 <see cref="AssigneeRule"/> 解析成實際員工，取代 legacy 散落的
 /// GetDispatchman / GetSir / GetMySupervisor 查詢，集中於此並加上 null 檢查。
+/// 只依賴 <see cref="IWorkflowForm"/> 路由脈絡，因此 Pr1/Pr2 等表單共用同一顆 resolver。
 /// </summary>
 public sealed class AssigneeResolver(IDbConnectionFactory db, IOrgRepository org) : IAssigneeResolver
 {
-    public async Task<Employee?> ResolveAsync(Pr1Form form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default)
+    public async Task<Employee?> ResolveAsync(IWorkflowForm form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default)
     {
+        var stage = form.Step.Stage;
         return rule switch
         {
             AssigneeRule.SafetyDesk => await DeskOfGroupAsync(Groups.Safety, ct),
             AssigneeRule.ImprovementDesk => form.InformGroupId is { Length: > 0 } g ? await DeskOfGroupAsync(g, ct) : null,
             AssigneeRule.SpecificPerson => await org.GetEmployeeAsync(specificPersonId ?? "", ct),
-            AssigneeRule.AssignedChief => await ById(PickChief(form)),
+            AssigneeRule.AssignedChief => await ById(form.ChiefOfRecord(stage)),
             AssigneeRule.Manager => await ManagerOfGroupAsync(GroupOfStage(form), ct),
             AssigneeRule.ProxyManager => await ById(specificPersonId),
-            AssigneeRule.OfficerOfRecord => await ById(OfficerOfRecord(form)),
-            AssigneeRule.ChiefOfRecord => await ById(ChiefOfRecord(form)),
-            AssigneeRule.ManagerOfRecord => await ById(ManagerOfRecord(form)),
+            AssigneeRule.OfficerOfRecord => await ById(form.OfficerOfRecord(stage)),
+            AssigneeRule.ChiefOfRecord => await ById(form.ChiefOfRecord(stage)),
+            AssigneeRule.ManagerOfRecord => await ById(form.ManagerOfRecord(stage)),
             AssigneeRule.Creator => await ById(form.CreatedBy),
             AssigneeRule.Leader => await ById(form.LeaderId),
             AssigneeRule.NextApprover => (await ResolveApprovalNextAsync(form, ct)).Approver,
@@ -34,36 +37,10 @@ public sealed class AssigneeResolver(IDbConnectionFactory db, IOrgRepository org
         Task<Employee?> ById(string? id) => string.IsNullOrEmpty(id) ? Task.FromResult<Employee?>(null) : org.GetEmployeeAsync(id, ct);
     }
 
-    private static string GroupOfStage(Pr1Form f) => f.Step.Stage switch
+    private static string GroupOfStage(IWorkflowForm f) => f.Step.Stage switch
     {
         Stage.Improvement => f.InformGroupId ?? Groups.Safety,
         _ => Groups.Safety, // C3/C5 都在工安組
-    };
-
-    private static string? PickChief(Pr1Form f) => f.Step.Stage switch
-    {
-        Stage.SafetyReview => f.SafetyChiefId,
-        Stage.Improvement => f.ImproveChiefId,
-        Stage.Verification => f.VerifyChiefId,
-        _ => null,
-    };
-
-    private static string? OfficerOfRecord(Pr1Form f) => f.Step.Stage switch
-    {
-        Stage.SafetyReview => f.SafetyOfficerId,
-        Stage.Improvement => f.ImproveOfficerId,
-        Stage.Verification => f.VerifyOfficerId,
-        _ => null,
-    };
-
-    private static string? ChiefOfRecord(Pr1Form f) => PickChief(f);
-
-    private static string? ManagerOfRecord(Pr1Form f) => f.Step.Stage switch
-    {
-        Stage.SafetyReview => f.SafetyManagerId,
-        Stage.Improvement => f.ImproveManagerId,
-        Stage.Verification => f.VerifyManagerId,
-        _ => null,
     };
 
     private async Task<Employee?> DeskOfGroupAsync(string groupId, CancellationToken ct)
@@ -88,9 +65,9 @@ public sealed class AssigneeResolver(IDbConnectionFactory db, IOrgRepository org
     /// <summary>
     /// C6 長官鏈：巡查領隊 → 工程副處長(ENSir) → 工安副處長(WSSir) → 處長(TSir)，
     /// 依 legacy 去重規則 (領隊本身可能已是某位副處長或處長) 跳過重複者。
-    /// 回傳下一關的位置與人員，讓流程把 Pr1_step 推進到正確的批示層級。
+    /// 回傳下一關的位置與人員，讓流程把步驟推進到正確的批示層級。
     /// </summary>
-    public async Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(Pr1Form form, CancellationToken ct = default)
+    public async Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(IWorkflowForm form, CancellationToken ct = default)
     {
         var leader = form.LeaderId;
         var engDeputy = await DeputyOfProjectGroupAsync(form, ct);   // 工程副處長：督促組別上層
@@ -114,7 +91,7 @@ public sealed class AssigneeResolver(IDbConnectionFactory db, IOrgRepository org
         static bool Same(string? a, Employee? b) => b is not null && a == b.EmployeeId;
     }
 
-    private async Task<Employee?> DeputyOfProjectGroupAsync(Pr1Form form, CancellationToken ct)
+    private async Task<Employee?> DeputyOfProjectGroupAsync(IWorkflowForm form, CancellationToken ct)
     {
         // 工程副處長 = 督促組別所屬副處長室 (ORG_Group 的上層) 的主管(副處長 Rank 2)。
         var groupId = form.InformGroupId ?? form.ImproveGroupId;

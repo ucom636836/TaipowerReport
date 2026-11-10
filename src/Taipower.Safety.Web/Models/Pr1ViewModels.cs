@@ -3,6 +3,7 @@ using Taipower.Safety.Core.Forms.Pr1;
 using Taipower.Safety.Core.Org;
 using Taipower.Safety.Core.Reference;
 
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Web.Models;
 
 public sealed class Pr1ItemInput
@@ -70,7 +71,7 @@ public sealed class Pr1FormViewModel
     public Contractor? Contractor { get; init; }
     public required IReadOnlyList<WorkflowHistoryRow> History { get; init; }
     public bool CanAct { get; init; }
-    public required IReadOnlyList<Pr1Action> Allowed { get; init; }
+    public required IReadOnlyList<WorkflowAction> Allowed { get; init; }
     public required IReadOnlyList<OrgGroup> Groups { get; init; }
 
     public IEnumerable<Pr1Item> Pros => Form.Items.Where(i => i.Kind == ItemKind.Pro);
@@ -91,7 +92,7 @@ public sealed class Pr1ItemResultInput
 public sealed class Pr1ActRequest
 {
     public long FormId { get; set; }
-    public Pr1Action Action { get; set; }
+    public WorkflowAction Action { get; set; }
     public string? Comment { get; set; }
     public string? AssigneeId { get; set; }
     public string? InformGroupId { get; set; }
@@ -127,28 +128,28 @@ public static class Pr1Display
         _ => p.ToString(),
     };
 
-    public static string StepName(Pr1Step s, FormStatus status) => status switch
+    public static string StepName(WorkflowStep s, FormStatus status) => status switch
     {
         FormStatus.Closed => "已結案",
         FormStatus.Voided => "已作廢",
         _ => $"{StageName(s.Stage)}（{PositionName(s.Position)}{(s.Transit == Transit.Submitted ? "·待處理" : "·處理中")}）",
     };
 
-    public static string ActionName(Pr1Action a) => a switch
+    public static string ActionName(WorkflowAction a) => a switch
     {
-        Pr1Action.Submit => "送出 / 上呈",
-        Pr1Action.AssignChief => "派單（課長）",
-        Pr1Action.AssignOfficer => "派單（經辦）",
-        Pr1Action.Withdraw => "抽回",
-        Pr1Action.ReturnToOfficer => "退回經辦",
-        Pr1Action.ReturnToChief => "退回課長",
-        Pr1Action.ReturnToDesk => "退回登記桌",
-        Pr1Action.ReturnToCreator => "退回開單人",
-        Pr1Action.NotifyContractor => "通知承攬商",
-        Pr1Action.CloseDecision => "是否結案",
-        Pr1Action.Approve => "核可結案",
-        Pr1Action.Reject => "不核可作廢",
-        Pr1Action.ReturnToLeader => "退回巡查領隊",
+        WorkflowAction.Submit => "送出 / 上呈",
+        WorkflowAction.AssignChief => "派單（課長）",
+        WorkflowAction.AssignOfficer => "派單（經辦）",
+        WorkflowAction.Withdraw => "抽回",
+        WorkflowAction.ReturnToOfficer => "退回經辦",
+        WorkflowAction.ReturnToChief => "退回課長",
+        WorkflowAction.ReturnToDesk => "退回登記桌",
+        WorkflowAction.ReturnToCreator => "退回開單人",
+        WorkflowAction.NotifyContractor => "通知承攬商",
+        WorkflowAction.CloseDecision => "是否結案",
+        WorkflowAction.Approve => "核可結案",
+        WorkflowAction.Reject => "不核可作廢",
+        WorkflowAction.ReturnToLeader => "退回巡查領隊",
         _ => a.ToString(),
     };
 }

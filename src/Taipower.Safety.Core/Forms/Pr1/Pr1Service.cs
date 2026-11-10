@@ -1,6 +1,7 @@
 using Taipower.Safety.Core.Common;
 using Taipower.Safety.Core.Org;
 
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Core.Forms.Pr1;
 
 public sealed record Pr1CreateRequest(
@@ -8,7 +9,7 @@ public sealed record Pr1CreateRequest(
     string LeaderId, string? TeamMembers, string? ImproveGroupId, IReadOnlyList<Pr1Item> Items);
 
 public sealed record Pr1ActionRequest(
-    long FormId, Pr1Action Action, string? Comment,
+    long FormId, WorkflowAction Action, string? Comment,
     string? SpecificPersonId = null, string? InformGroupId = null, DateTime? ImproveDeadline = null,
     bool IsJump = false, bool IsProxy = false, bool AgreeClose = true);
 
@@ -46,7 +47,7 @@ public sealed class Pr1Service(
         };
 
         // 建單 = C1 Submit → 工安組登記桌。
-        var transition = Pr1Workflow.Next(Pr1Step.Draft, Pr1Action.Submit, new Pr1ActionContext())!;
+        var transition = SafetyWorkflow.Next(WorkflowStep.Draft, WorkflowAction.Submit, new WorkflowActionContext())!;
         var desk = await resolver.ResolveAsync(form, transition.Assignee, actor.EmployeeId, null, ct);
         if (desk is null) return new Pr1ActionResult(false, "找不到工安組登記桌，請先於組織維護設定。");
 
@@ -81,8 +82,8 @@ public sealed class Pr1Service(
         if (actor.EmployeeId != form.PendingRecipientId && actor.EmployeeId != form.CurrentHolderId)
             return new Pr1ActionResult(false, "您目前不是此單的處理人。");
 
-        var ctx = new Pr1ActionContext { IsJump = req.IsJump, IsProxy = req.IsProxy, AgreeClose = req.AgreeClose };
-        var transition = Pr1Workflow.Next(form.Step, req.Action, ctx);
+        var ctx = new WorkflowActionContext { IsJump = req.IsJump, IsProxy = req.IsProxy, AgreeClose = req.AgreeClose };
+        var transition = SafetyWorkflow.Next(form.Step, req.Action, ctx);
         if (transition is null) return new Pr1ActionResult(false, "目前狀態不允許這個動作。");
 
         // 本次動作要寫入的欄位（督促組別/期限/簽核人/旗標）。
@@ -230,20 +231,20 @@ public sealed class Pr1Service(
         if (form is null || form.PendingRecipientId != actor.EmployeeId || form.CurrentHolderId == actor.EmployeeId) return;
         var open = form.Step with { Transit = Transit.Working };
         form.CurrentHolderId = actor.EmployeeId;
-        await repo.ApplyTransitionAsync(form, new Pr1Transition(open, AssigneeRule.Self, false, HistoryLabel: "承接"),
+        await repo.ApplyTransitionAsync(form, new WorkflowTransition(open, AssigneeRule.Self, false, HistoryLabel: "承接"),
             actor.EmployeeId, actor.Name, null, ct);
     }
 
-    private static void ApplySideData(Pr1Form form, Pr1ActionRequest req, Pr1ActionContext ctx)
+    private static void ApplySideData(Pr1Form form, Pr1ActionRequest req, WorkflowActionContext ctx)
     {
         var stage = form.Step.Stage;
 
-        if (req.Action is Pr1Action.AssignChief)
+        if (req.Action is WorkflowAction.AssignChief)
             SetChief(form, stage, req.SpecificPersonId);
-        else if (req.Action is Pr1Action.AssignOfficer)
+        else if (req.Action is WorkflowAction.AssignOfficer)
             SetOfficer(form, stage, req.SpecificPersonId);
 
-        if (req.Action is Pr1Action.Submit && form.Step.Position == Position.Officer)
+        if (req.Action is WorkflowAction.Submit && form.Step.Position == Position.Officer)
         {
             SetOfficer(form, stage, form.CurrentHolderId);
             form.IsJump = ctx.IsJump;
@@ -253,15 +254,15 @@ public sealed class Pr1Service(
                 form.ImproveDeadline = req.ImproveDeadline ?? form.ImproveDeadline;
             }
         }
-        if (req.Action is Pr1Action.Submit && form.Step.Position == Position.Chief)
+        if (req.Action is WorkflowAction.Submit && form.Step.Position == Position.Chief)
         {
             SetChief(form, stage, form.CurrentHolderId);
             form.IsProxy = ctx.IsProxy;
         }
-        if (req.Action is Pr1Action.Submit && form.Step.Position == Position.Manager)
+        if (req.Action is WorkflowAction.Submit && form.Step.Position == Position.Manager)
             SetManager(form, stage, form.CurrentHolderId);
 
-        if (req.Action is Pr1Action.CloseDecision && !ctx.AgreeClose)
+        if (req.Action is WorkflowAction.CloseDecision && !ctx.AgreeClose)
         {
             form.IsJump = false;
             form.IsProxy = false;

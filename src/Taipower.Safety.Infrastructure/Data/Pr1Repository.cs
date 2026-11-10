@@ -2,6 +2,7 @@ using System.Text;
 using Dapper;
 using Taipower.Safety.Core.Forms.Pr1;
 
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Infrastructure.Data;
 
 public sealed class Pr1Repository(IDbConnectionFactory db) : IPr1Repository
@@ -192,13 +193,13 @@ public sealed class Pr1Repository(IDbConnectionFactory db) : IPr1Repository
         return form;
     }
 
-    private static Pr1Step ParseStep(string s)
+    private static WorkflowStep ParseStep(string s)
     {
         var parts = s.Split('/');
-        return new Pr1Step(Enum.Parse<Stage>(parts[0]), Enum.Parse<Position>(parts[1]), Enum.Parse<Transit>(parts[2]));
+        return new WorkflowStep(Enum.Parse<Stage>(parts[0]), Enum.Parse<Position>(parts[1]), Enum.Parse<Transit>(parts[2]));
     }
 
-    public async Task ApplyTransitionAsync(Pr1Form form, Pr1Transition t, string actorId, string actorTitle, string? comment, CancellationToken ct = default)
+    public async Task ApplyTransitionAsync(Pr1Form form, WorkflowTransition t, string actorId, string actorTitle, string? comment, CancellationToken ct = default)
     {
         var newRevision = form.Revision + (t.IncrementRevision ? 1 : 0);
         await using var conn = await db.OpenAsync(ct);

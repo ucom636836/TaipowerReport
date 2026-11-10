@@ -1,6 +1,6 @@
-namespace Taipower.Safety.Core.Forms.Pr1;
+namespace Taipower.Safety.Core.Forms.Workflow;
 
-/// <summary>簽核階段 (legacy C1..C6)。</summary>
+/// <summary>簽核階段 (legacy C1..C6)。各表單 (Pr1/Pr2/…) 共用。</summary>
 public enum Stage
 {
     Create = 1,        // C1 開單
@@ -42,16 +42,16 @@ public enum FormStatus
     Voided,     // 不核可作廢 (legacy C698)
 }
 
-/// <summary>一個 Pr1 單在流程中的位置，取代 legacy 的 Pr1_step 字串。</summary>
-public readonly record struct Pr1Step(Stage Stage, Position Position, Transit Transit)
+/// <summary>一張單在流程中的位置，取代 legacy 的 Pr?_step 字串。</summary>
+public readonly record struct WorkflowStep(Stage Stage, Position Position, Transit Transit)
 {
-    public static readonly Pr1Step Draft = new(Stage.Create, Position.Creator, Transit.Working);
+    public static readonly WorkflowStep Draft = new(Stage.Create, Position.Creator, Transit.Working);
 
     public override string ToString() => $"{Stage}/{Position}/{Transit}";
 }
 
 /// <summary>使用者可對單執行的動作。</summary>
-public enum Pr1Action
+public enum WorkflowAction
 {
     Submit,          // 送出 / 傳送 / 建單
     AssignChief,     // 登記桌派課長 (SC)
@@ -88,8 +88,8 @@ public enum AssigneeRule
     Self,               // 維持現持有人
 }
 
-public sealed record Pr1Transition(
-    Pr1Step To,
+public sealed record WorkflowTransition(
+    WorkflowStep To,
     AssigneeRule Assignee,
     bool SendEmail,
     bool IncrementRevision = false,
@@ -97,7 +97,7 @@ public sealed record Pr1Transition(
     string? HistoryLabel = null);
 
 /// <summary>執行動作時的輸入脈絡。</summary>
-public sealed record Pr1ActionContext
+public sealed record WorkflowActionContext
 {
     /// <summary>C3 跳關：經辦直接送經理，略過課長。</summary>
     public bool IsJump { get; init; }
@@ -108,35 +108,58 @@ public sealed record Pr1ActionContext
 }
 
 /// <summary>
-/// Pr1 簽核流程狀態機 (純邏輯，可單元測試)。
-/// 將 legacy Pr1Controller/Pr1Dao 中散落的字串比對集中成一張宣告式轉移表。
+/// 一張受流程引擎管轄的單所暴露的「路由脈絡」。
+/// resolver 只依賴這組欄位決定下一關領單人，因此 Pr1/Pr2 等表單
+/// 各自以自己的欄位實作此介面，即可共用同一套 <see cref="AssigneeResolver"/>。
 /// </summary>
-public static class Pr1Workflow
+public interface IWorkflowForm
+{
+    WorkflowStep Step { get; }
+    string CreatedBy { get; }
+    string LeaderId { get; }
+    string? CurrentHolderId { get; }
+    string? InformGroupId { get; }   // C3 決定的督促組別
+    string? ImproveGroupId { get; }  // 建單建議的督促組別
+
+    /// <summary>該階段已簽核的經辦 (供退回定位)。</summary>
+    string? OfficerOfRecord(Stage stage);
+    /// <summary>該階段已簽核的課長。</summary>
+    string? ChiefOfRecord(Stage stage);
+    /// <summary>該階段已簽核的經理。</summary>
+    string? ManagerOfRecord(Stage stage);
+}
+
+/// <summary>
+/// 工安表單簽核流程狀態機 (純邏輯，可單元測試)。
+/// 將 legacy Pr?Controller/Pr?Dao 中散落的字串比對集中成一張宣告式轉移表。
+/// Pr1 與 Pr2 共用同一條 C1→C6 鏈。
+/// </summary>
+public static class SafetyWorkflow
 {
     /// <summary>某步驟允許哪些動作 (用於產生按鈕 / 驗證請求)。</summary>
-    public static IReadOnlyList<Pr1Action> AllowedActions(Pr1Step step)
+    public static IReadOnlyList<WorkflowAction> AllowedActions(WorkflowStep step)
     {
         switch (step.Stage)
         {
             case Stage.Create:
-                return [Pr1Action.Submit];
+                return [WorkflowAction.Submit];
 
             case Stage.SafetyReview or Stage.Improvement or Stage.Verification:
                 return step.Position switch
                 {
-                    Position.Assign => [Pr1Action.AssignChief, Pr1Action.AssignOfficer, Pr1Action.ReturnToDesk, Pr1Action.ReturnToCreator],
-                    Position.Officer => [Pr1Action.Submit, Pr1Action.Withdraw, Pr1Action.ReturnToDesk],
-                    Position.Chief => [Pr1Action.Submit, Pr1Action.Withdraw, Pr1Action.ReturnToOfficer],
-                    Position.Manager => [Pr1Action.Submit, Pr1Action.Withdraw, Pr1Action.ReturnToOfficer, Pr1Action.ReturnToChief],
+                    Position.Assign => [WorkflowAction.AssignChief, WorkflowAction.AssignOfficer, WorkflowAction.ReturnToDesk, WorkflowAction.ReturnToCreator],
+                    Position.Officer => [WorkflowAction.Submit, WorkflowAction.Withdraw, WorkflowAction.ReturnToDesk],
+                    Position.Chief => [WorkflowAction.Submit, WorkflowAction.Withdraw, WorkflowAction.ReturnToOfficer],
+                    Position.Manager => [WorkflowAction.Submit, WorkflowAction.Withdraw, WorkflowAction.ReturnToOfficer, WorkflowAction.ReturnToChief],
                     _ => [],
                 };
 
             case Stage.Approval:
                 return step.Position switch
                 {
-                    Position.Leader => [Pr1Action.CloseDecision, Pr1Action.Withdraw],
-                    Position.DeputyEng or Position.DeputySafety => [Pr1Action.Submit, Pr1Action.Withdraw],
-                    Position.Director => [Pr1Action.Approve, Pr1Action.Reject, Pr1Action.ReturnToLeader],
+                    Position.Leader => [WorkflowAction.CloseDecision, WorkflowAction.Withdraw],
+                    Position.DeputyEng or Position.DeputySafety => [WorkflowAction.Submit, WorkflowAction.Withdraw],
+                    Position.Director => [WorkflowAction.Approve, WorkflowAction.Reject, WorkflowAction.ReturnToLeader],
                     _ => [],
                 };
 
@@ -149,7 +172,7 @@ public static class Pr1Workflow
     /// 計算一次轉移。回傳 null 代表該步驟不允許此動作。
     /// 不處理「收件人開啟承接 (Open)」與「通知承攬商 (NotifyContractor)」這兩個不改變步驟的動作。
     /// </summary>
-    public static Pr1Transition? Next(Pr1Step step, Pr1Action action, Pr1ActionContext ctx)
+    public static WorkflowTransition? Next(WorkflowStep step, WorkflowAction action, WorkflowActionContext ctx)
     {
         if (!AllowedActions(step).Contains(action)) return null;
 
@@ -164,11 +187,11 @@ public static class Pr1Workflow
         };
     }
 
-    private static Pr1Transition? CreateStage(Pr1Step step, Pr1Action action) => action switch
+    private static WorkflowTransition? CreateStage(WorkflowStep step, WorkflowAction action) => action switch
     {
         // 建單送出 → 進工安組，等待工安組登記桌。
-        Pr1Action.Submit => new Pr1Transition(
-            new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
+        WorkflowAction.Submit => new WorkflowTransition(
+            new WorkflowStep(Stage.SafetyReview, Position.Assign, Transit.Submitted),
             AssigneeRule.SafetyDesk, SendEmail: true, HistoryLabel: "建單"),
         _ => null,
     };
@@ -182,63 +205,63 @@ public static class Pr1Workflow
         _ => throw new ArgumentOutOfRangeException(nameof(s)),
     };
 
-    private static Pr1Transition? ReviewStage(Pr1Step step, Pr1Action action, Pr1ActionContext ctx, Stage stage)
+    private static WorkflowTransition? ReviewStage(WorkflowStep step, WorkflowAction action, WorkflowActionContext ctx, Stage stage)
     {
         switch (action)
         {
-            case Pr1Action.AssignChief:
+            case WorkflowAction.AssignChief:
                 // 指派課長後仍停在 Assign 關，由課長再指派經辦。
-                return new Pr1Transition(step with { Position = Position.Assign, Transit = Transit.Submitted },
+                return new WorkflowTransition(step with { Position = Position.Assign, Transit = Transit.Submitted },
                     AssigneeRule.SpecificPerson, SendEmail: true, HistoryLabel: "派單（課長）");
 
-            case Pr1Action.AssignOfficer:
+            case WorkflowAction.AssignOfficer:
                 // 指派經辦後進入經辦關，經辦開啟後即可簽註上呈。
-                return new Pr1Transition(new Pr1Step(stage, Position.Officer, Transit.Submitted),
+                return new WorkflowTransition(new WorkflowStep(stage, Position.Officer, Transit.Submitted),
                     AssigneeRule.SpecificPerson, SendEmail: true, HistoryLabel: "派單（經辦）");
 
-            case Pr1Action.Submit when step.Position == Position.Officer:
+            case WorkflowAction.Submit when step.Position == Position.Officer:
                 // 經辦上呈：跳關→經理，否則→課長。
                 return ctx.IsJump
-                    ? new Pr1Transition(new Pr1Step(stage, Position.Manager, Transit.Submitted), AssigneeRule.Manager, true, HistoryLabel: "簽核")
-                    : new Pr1Transition(new Pr1Step(stage, Position.Chief, Transit.Submitted), AssigneeRule.AssignedChief, true, HistoryLabel: "簽核");
+                    ? new WorkflowTransition(new WorkflowStep(stage, Position.Manager, Transit.Submitted), AssigneeRule.Manager, true, HistoryLabel: "簽核")
+                    : new WorkflowTransition(new WorkflowStep(stage, Position.Chief, Transit.Submitted), AssigneeRule.AssignedChief, true, HistoryLabel: "簽核");
 
-            case Pr1Action.Submit when step.Position == Position.Chief:
+            case WorkflowAction.Submit when step.Position == Position.Chief:
                 // 課長上呈：代理→他課課長，否則→經理。
                 return ctx.IsProxy
-                    ? new Pr1Transition(new Pr1Step(stage, Position.Manager, Transit.Submitted), AssigneeRule.ProxyManager, true, HistoryLabel: "簽核")
-                    : new Pr1Transition(new Pr1Step(stage, Position.Manager, Transit.Submitted), AssigneeRule.Manager, true, HistoryLabel: "簽核");
+                    ? new WorkflowTransition(new WorkflowStep(stage, Position.Manager, Transit.Submitted), AssigneeRule.ProxyManager, true, HistoryLabel: "簽核")
+                    : new WorkflowTransition(new WorkflowStep(stage, Position.Manager, Transit.Submitted), AssigneeRule.Manager, true, HistoryLabel: "簽核");
 
-            case Pr1Action.Submit when step.Position == Position.Manager:
+            case WorkflowAction.Submit when step.Position == Position.Manager:
                 // 經理核定，進入下一階段的登記桌。
                 return stage switch
                 {
-                    Stage.SafetyReview => new Pr1Transition(
-                        new Pr1Step(Stage.Improvement, Position.Assign, Transit.Submitted),
+                    Stage.SafetyReview => new WorkflowTransition(
+                        new WorkflowStep(Stage.Improvement, Position.Assign, Transit.Submitted),
                         AssigneeRule.ImprovementDesk, true, HistoryLabel: "簽核"),
-                    Stage.Improvement => new Pr1Transition(
-                        new Pr1Step(Stage.Verification, Position.Assign, Transit.Submitted),
+                    Stage.Improvement => new WorkflowTransition(
+                        new WorkflowStep(Stage.Verification, Position.Assign, Transit.Submitted),
                         AssigneeRule.SafetyDesk, true, HistoryLabel: "簽核"),
-                    Stage.Verification => new Pr1Transition(
-                        new Pr1Step(Stage.Approval, Position.Leader, Transit.Submitted),
+                    Stage.Verification => new WorkflowTransition(
+                        new WorkflowStep(Stage.Approval, Position.Leader, Transit.Submitted),
                         AssigneeRule.Leader, true, HistoryLabel: "簽核"),
                     _ => null,
                 };
 
-            case Pr1Action.ReturnToOfficer:
-                return new Pr1Transition(new Pr1Step(stage, Position.Officer, Transit.Submitted),
+            case WorkflowAction.ReturnToOfficer:
+                return new WorkflowTransition(new WorkflowStep(stage, Position.Officer, Transit.Submitted),
                     AssigneeRule.OfficerOfRecord, true, HistoryLabel: "退回經辦");
 
-            case Pr1Action.ReturnToChief:
-                return new Pr1Transition(new Pr1Step(stage, Position.Chief, Transit.Submitted),
+            case WorkflowAction.ReturnToChief:
+                return new WorkflowTransition(new WorkflowStep(stage, Position.Chief, Transit.Submitted),
                     AssigneeRule.ChiefOfRecord, true, HistoryLabel: "退回課長");
 
-            case Pr1Action.ReturnToDesk:
-                return new Pr1Transition(new Pr1Step(stage, Position.Assign, Transit.Submitted),
+            case WorkflowAction.ReturnToDesk:
+                return new WorkflowTransition(new WorkflowStep(stage, Position.Assign, Transit.Submitted),
                     AssigneeRule.SafetyDesk, true, HistoryLabel: "退回登記桌");
 
-            case Pr1Action.ReturnToCreator:
+            case WorkflowAction.ReturnToCreator:
                 // 工安組登記桌把單退回開單人。
-                return new Pr1Transition(Pr1Step.Draft with { Transit = Transit.Submitted },
+                return new WorkflowTransition(WorkflowStep.Draft with { Transit = Transit.Submitted },
                     AssigneeRule.Creator, true, IncrementRevision: true, HistoryLabel: "退回開單人");
 
             default:
@@ -246,32 +269,32 @@ public static class Pr1Workflow
         }
     }
 
-    private static Pr1Transition? ApprovalStage(Pr1Step step, Pr1Action action, Pr1ActionContext ctx)
+    private static WorkflowTransition? ApprovalStage(WorkflowStep step, WorkflowAction action, WorkflowActionContext ctx)
     {
         switch (step.Position)
         {
-            case Position.Leader when action == Pr1Action.CloseDecision:
+            case Position.Leader when action == WorkflowAction.CloseDecision:
                 return ctx.AgreeClose
                     // 同意結案：上呈下一位長官 (實際人選由 C6 chain resolver 定)。
-                    ? new Pr1Transition(step with { Transit = Transit.Submitted }, AssigneeRule.NextApprover, true, HistoryLabel: "巡查領隊覆核")
+                    ? new WorkflowTransition(step with { Transit = Transit.Submitted }, AssigneeRule.NextApprover, true, HistoryLabel: "巡查領隊覆核")
                     // 不同意結案：退回經辦組重新處理改善。
-                    : new Pr1Transition(new Pr1Step(Stage.Improvement, Position.Assign, Transit.Submitted),
+                    : new WorkflowTransition(new WorkflowStep(Stage.Improvement, Position.Assign, Transit.Submitted),
                         AssigneeRule.ImprovementDesk, true, IncrementRevision: true, HistoryLabel: "巡查領隊不同意結案");
 
-            case Position.DeputyEng when action == Pr1Action.Submit:
-            case Position.DeputySafety when action == Pr1Action.Submit:
-                return new Pr1Transition(step with { Transit = Transit.Submitted }, AssigneeRule.NextApprover, true, HistoryLabel: "批示");
+            case Position.DeputyEng when action == WorkflowAction.Submit:
+            case Position.DeputySafety when action == WorkflowAction.Submit:
+                return new WorkflowTransition(step with { Transit = Transit.Submitted }, AssigneeRule.NextApprover, true, HistoryLabel: "批示");
 
-            case Position.Director when action == Pr1Action.Approve:
-                return new Pr1Transition(step with { Transit = Transit.Submitted }, AssigneeRule.Self, false,
+            case Position.Director when action == WorkflowAction.Approve:
+                return new WorkflowTransition(step with { Transit = Transit.Submitted }, AssigneeRule.Self, false,
                     Status: FormStatus.Closed, HistoryLabel: "核可結案");
 
-            case Position.Director when action == Pr1Action.Reject:
-                return new Pr1Transition(step with { Transit = Transit.Submitted }, AssigneeRule.Creator, true,
+            case Position.Director when action == WorkflowAction.Reject:
+                return new WorkflowTransition(step with { Transit = Transit.Submitted }, AssigneeRule.Creator, true,
                     Status: FormStatus.Voided, HistoryLabel: "不核可作廢");
 
-            case Position.Director when action == Pr1Action.ReturnToLeader:
-                return new Pr1Transition(new Pr1Step(Stage.Approval, Position.Leader, Transit.Submitted),
+            case Position.Director when action == WorkflowAction.ReturnToLeader:
+                return new WorkflowTransition(new WorkflowStep(Stage.Approval, Position.Leader, Transit.Submitted),
                     AssigneeRule.Leader, true, HistoryLabel: "退回巡查領隊");
 
             default:

@@ -9,6 +9,7 @@ using Taipower.Safety.Core.Security;
 using Taipower.Safety.Web.Infrastructure;
 using Taipower.Safety.Web.Models;
 
+using Taipower.Safety.Core.Forms.Workflow;
 namespace Taipower.Safety.Web.Controllers;
 
 public sealed class Pr1Controller(
@@ -83,7 +84,7 @@ public sealed class Pr1Controller(
             Contractor = await refs.GetContractorAsync(form.ContractorId, ct),
             History = await repo.GetHistoryAsync(id, ct),
             CanAct = form.Status == FormStatus.InProgress && form.CurrentHolderId == Me.EmployeeId && form.PendingRecipientId == Me.EmployeeId,
-            Allowed = Pr1Workflow.AllowedActions(form.Step),
+            Allowed = SafetyWorkflow.AllowedActions(form.Step),
             Groups = await org.GetGroupsAsync(ct),
         };
         return View(vm);
