@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Taipower.Safety.Core.Common;
@@ -98,6 +99,41 @@ public sealed class Pr1Controller(
         await AuditAsync($"工安巡查-{req.Action}", req.FormId.ToString(), result.Ok ? "成功" : result.Error, result.Ok);
         Flash(result.Ok ? "已完成。" : result.Error!, result.Ok ? "success" : "danger");
         return RedirectToAction(nameof(Form), new { id = req.FormId });
+    }
+
+    // ----- 項目照片（缺失現況 / 改善後）-----
+    [RequireFeature(Features.Pr1SafetyReview, Features.Pr1HandlerProcess, Features.Pr1Verify), HttpPost]
+    [RequestSizeLimit(20_000_000)]
+    public async Task<IActionResult> UploadPhoto(long formId, long itemId, string category, IFormFile? file, CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            Flash("請選擇要上傳的圖片。", "danger");
+            return RedirectToAction(nameof(Form), new { id = formId });
+        }
+        await using var stream = file.OpenReadStream();
+        var result = await service.AddPhotoAsync(formId, itemId, category, file.FileName, file.Length, stream, Me, ct);
+        await AuditAsync("工安巡查-上傳照片", $"{formId}/{itemId}", result.Ok ? "成功" : result.Error, result.Ok);
+        Flash(result.Ok ? "照片已上傳。" : result.Error!, result.Ok ? "success" : "danger");
+        return RedirectToAction(nameof(Form), new { id = formId });
+    }
+
+    // 供檔：檢視權限由 RequireFeature 把關（可檢視表單者即可看照片）。id = AttachmentId。
+    [RequireFeature(Features.Pr1Query, Features.Pr1Create, Features.Pr1SafetyReview, Features.Pr1HandlerProcess, Features.Pr1Verify, Features.Pr1Approve)]
+    public async Task<IActionResult> Photo(long id, CancellationToken ct)
+    {
+        var photo = await service.OpenPhotoAsync(id, ct);
+        if (photo is null) return NotFound();
+        return File(photo.Value.Stream, photo.Value.ContentType);
+    }
+
+    [RequireFeature(Features.Pr1SafetyReview, Features.Pr1HandlerProcess, Features.Pr1Verify), HttpPost]
+    public async Task<IActionResult> DeletePhoto(long formId, long attachmentId, CancellationToken ct)
+    {
+        var result = await service.DeletePhotoAsync(attachmentId, Me, ct);
+        await AuditAsync("工安巡查-刪除照片", $"{formId}/{attachmentId}", result.Ok ? "成功" : result.Error, result.Ok);
+        Flash(result.Ok ? "照片已刪除。" : result.Error!, result.Ok ? "success" : "danger");
+        return RedirectToAction(nameof(Form), new { id = formId });
     }
 
     // ----- 下拉輔助 (AJAX) -----

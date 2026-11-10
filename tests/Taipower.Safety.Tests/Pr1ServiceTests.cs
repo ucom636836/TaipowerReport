@@ -27,22 +27,26 @@ public class Pr1ServiceTests
         LeaderId: "LEAD", TeamMembers: null, ImproveGroupId: null,
         Items: items ?? [new Pr1Item { Kind = ItemKind.Con, Description = "未戴安全帽" }]);
 
-    private static (Pr1Service svc, FakePr1Repository repo, FakeResolver resolver, FakeEmail email) Build()
+    private static (Pr1Service svc, FakePr1Repository repo, FakeResolver resolver, FakeEmail email, FakeStorage storage) Build()
     {
         var repo = new FakePr1Repository();
         var resolver = new FakeResolver();
         var email = new FakeEmail();
+        var storage = new FakeStorage();
         var composer = new Pr1EmailComposer(new FakeRefs()) { PublicBaseUrl = () => "http://test/" };
-        var svc = new Pr1Service(repo, resolver, email, composer);
-        return (svc, repo, resolver, email);
+        var svc = new Pr1Service(repo, resolver, email, composer, storage, new StorageOptions { MaxFileBytes = 1_000_000 });
+        return (svc, repo, resolver, email, storage);
     }
+
+    // 最小有效 PNG 檔頭（magic bytes），供照片檢核通過。
+    private static readonly byte[] PngBytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 0, 0];
 
     // ---- 建單 ----
 
     [Fact]
     public async Task Create_valid_stores_form_at_desk_and_notifies()
     {
-        var (svc, repo, resolver, email) = Build();
+        var (svc, repo, resolver, email, _) = Build();
         resolver.Default = Emp("DESK", "登記桌");
 
         var result = await svc.CreateAsync(ValidCreate(), User("MAKER"));
@@ -59,7 +63,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Create_rejects_empty_items()
     {
-        var (svc, _, resolver, _) = Build();
+        var (svc, _, resolver, _, _) = Build();
         resolver.Default = Emp("DESK");
         var result = await svc.CreateAsync(ValidCreate(items: []), User("MAKER"));
         Assert.False(result.Ok);
@@ -68,7 +72,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Create_rejects_unknown_patrol_type()
     {
-        var (svc, _, resolver, _) = Build();
+        var (svc, _, resolver, _, _) = Build();
         resolver.Default = Emp("DESK");
         var bad = ValidCreate() with { PatrolType = "ZZ" };
         var result = await svc.CreateAsync(bad, User("MAKER"));
@@ -78,7 +82,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Create_fails_when_no_safety_desk_found()
     {
-        var (svc, _, resolver, _) = Build();
+        var (svc, _, resolver, _, _) = Build();
         resolver.Default = null; // 工安組查無登記桌
         var result = await svc.CreateAsync(ValidCreate(), User("MAKER"));
         Assert.False(result.Ok);
@@ -90,7 +94,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_rejects_user_who_is_not_holder_or_recipient()
     {
-        var (svc, repo, _, _) = Build();
+        var (svc, repo, _, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
             holder: "DESK", pending: "DESK"));
         var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.AssignOfficer, null, SpecificPersonId: "OFF"),
@@ -102,7 +106,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_rejects_action_not_allowed_in_current_step()
     {
-        var (svc, repo, _, _) = Build();
+        var (svc, repo, _, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
             holder: "OFF", pending: "OFF"));
         // 經辦關不允許「核可」
@@ -113,7 +117,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_rejects_already_closed_form()
     {
-        var (svc, repo, _, _) = Build();
+        var (svc, repo, _, _, _) = Build();
         var form = FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Submitted), holder: "DIR", pending: "DIR");
         form.Status = FormStatus.Closed;
         repo.Seed(form);
@@ -127,7 +131,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_assign_officer_records_officer_and_advances_step()
     {
-        var (svc, repo, _, _) = Build();
+        var (svc, repo, _, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
             holder: "DESK", pending: "DESK"));
 
@@ -144,7 +148,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_officer_submit_with_jump_goes_to_manager_and_sets_jump_flag()
     {
-        var (svc, repo, resolver, _) = Build();
+        var (svc, repo, resolver, _, _) = Build();
         resolver.Default = Emp("MGR", "經理");
         repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
             holder: "OFF1", pending: "OFF1"));
@@ -164,7 +168,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_leader_close_resolves_next_approver_and_overrides_position()
     {
-        var (svc, repo, resolver, _) = Build();
+        var (svc, repo, resolver, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
             holder: "LEAD", pending: "LEAD"));
         // 去重後下一關是「工程副處長」
@@ -182,7 +186,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_next_approver_missing_person_fails()
     {
-        var (svc, repo, resolver, _) = Build();
+        var (svc, repo, resolver, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
             holder: "LEAD", pending: "LEAD"));
         resolver.ApprovalNext = (Position.DeputyEng, null); // 查無副處長／處長
@@ -197,7 +201,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Act_director_approve_closes_form_without_email()
     {
-        var (svc, repo, resolver, email) = Build();
+        var (svc, repo, resolver, email, _) = Build();
         resolver.Default = Emp("DIR", "處長");
         repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Working),
             holder: "DIR", pending: "DIR"));
@@ -214,7 +218,7 @@ public class Pr1ServiceTests
     [Fact]
     public async Task Open_takes_over_as_holder_without_changing_stage()
     {
-        var (svc, repo, _, _) = Build();
+        var (svc, repo, _, _, _) = Build();
         repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Submitted),
             holder: "DESK", pending: "OFF1"));
 
@@ -224,6 +228,116 @@ public class Pr1ServiceTests
         Assert.Equal("OFF1", form.CurrentHolderId);
         Assert.Equal(Stage.SafetyReview, form.Step.Stage);
         Assert.Equal(Transit.Working, form.Step.Transit);
+    }
+
+    // ---- 項目照片 ----
+
+    private static Pr1Form HolderFormWithItem() =>
+        FormAt(new Pr1Step(Stage.Improvement, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF");
+
+    [Fact]
+    public async Task AddPhoto_valid_stores_file_and_records_attachment()
+    {
+        var (svc, repo, _, _, storage) = Build();
+        repo.Seed(HolderFormWithItem());
+
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "現況.png", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+
+        Assert.True(r.Ok, r.Error);
+        Assert.Single(repo.Attachments);
+        Assert.Single(storage.Saved);
+        Assert.Equal("Before", repo.Attachments[0].Category);
+        Assert.Equal("image/png", repo.Attachments[0].ContentType);
+        Assert.Equal("OFF", repo.Attachments[0].UploadedBy);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_non_holder()
+    {
+        var (svc, repo, _, _, storage) = Build();
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "a.png", PngBytes.Length, new MemoryStream(PngBytes), User("OUTSIDER"));
+        Assert.False(r.Ok);
+        Assert.Empty(storage.Saved);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_closed_form()
+    {
+        var (svc, repo, _, _, _) = Build();
+        var form = HolderFormWithItem();
+        form.Status = FormStatus.Closed;
+        repo.Seed(form);
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "a.png", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+        Assert.False(r.Ok);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_oversize_file()
+    {
+        var (svc, repo, _, _, _) = Build(); // MaxFileBytes = 1,000,000
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "a.png", 2_000_000, new MemoryStream(PngBytes), User("OFF"));
+        Assert.False(r.Ok);
+        Assert.Contains("上限", r.Error);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_non_image_extension()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "evil.exe", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+        Assert.False(r.Ok);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_unknown_item()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.AddPhotoAsync(1, 999, "Before", "a.png", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+        Assert.False(r.Ok);
+    }
+
+    [Fact]
+    public async Task AddPhoto_rejects_disguised_non_image_content()
+    {
+        var (svc, repo, _, _, storage) = Build();
+        repo.Seed(HolderFormWithItem());
+        var notImage = new MemoryStream([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]); // 正確副檔名但內容非圖片
+        var r = await svc.AddPhotoAsync(1, 10, "Before", "fake.png", 12, notImage, User("OFF"));
+        Assert.False(r.Ok);
+        Assert.Empty(storage.Saved);
+    }
+
+    [Fact]
+    public async Task DeletePhoto_removes_attachment_and_file_for_holder()
+    {
+        var (svc, repo, _, _, storage) = Build();
+        repo.Seed(HolderFormWithItem());
+        await svc.AddPhotoAsync(1, 10, "After", "ok.png", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+        var attId = repo.Attachments[0].AttachmentId;
+
+        var r = await svc.DeletePhotoAsync(attId, User("OFF"));
+
+        Assert.True(r.Ok, r.Error);
+        Assert.Empty(repo.Attachments);
+        Assert.Empty(storage.Saved);
+    }
+
+    [Fact]
+    public async Task DeletePhoto_rejects_non_holder()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem());
+        await svc.AddPhotoAsync(1, 10, "After", "ok.png", PngBytes.Length, new MemoryStream(PngBytes), User("OFF"));
+        var attId = repo.Attachments[0].AttachmentId;
+
+        var r = await svc.DeletePhotoAsync(attId, User("OUTSIDER"));
+
+        Assert.False(r.Ok);
+        Assert.Single(repo.Attachments);
     }
 
     // ---- helpers ----
@@ -242,6 +356,7 @@ public class Pr1ServiceTests
         ContractorId = 2,
         LeaderId = "LEAD",
         CreatedBy = "MAKER",
+        Items = [new Pr1Item { ItemId = 10, FormId = 1, Kind = ItemKind.Con, Ordinal = 1, Description = "未戴安全帽" }],
     };
 
     // ================= fakes =================
@@ -288,6 +403,45 @@ public class Pr1ServiceTests
             => Task.FromResult<IReadOnlyList<Pr1InboxRow>>([]);
         public Task<IReadOnlyList<WorkflowHistoryRow>> GetHistoryAsync(long formId, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<WorkflowHistoryRow>>([]);
+
+        public List<Attachment> Attachments { get; } = new();
+        private long _attSeq;
+
+        public Task<long> AddAttachmentAsync(Attachment a, CancellationToken ct = default)
+        {
+            a.AttachmentId = ++_attSeq;
+            Attachments.Add(a);
+            return Task.FromResult(a.AttachmentId);
+        }
+
+        public Task<Pr1AttachmentInfo?> GetAttachmentAsync(long attachmentId, CancellationToken ct = default)
+        {
+            var a = Attachments.FirstOrDefault(x => x.AttachmentId == attachmentId);
+            if (a is null) return Task.FromResult<Pr1AttachmentInfo?>(null);
+            var formId = _forms.Values.FirstOrDefault(f => f.Items.Any(i => i.ItemId == a.ItemId))?.FormId ?? 0;
+            return Task.FromResult<Pr1AttachmentInfo?>(
+                new Pr1AttachmentInfo(a.AttachmentId, a.ItemId, formId, a.Category, a.OriginalName, a.StoredName, a.ContentType));
+        }
+
+        public Task DeleteAttachmentAsync(long attachmentId, CancellationToken ct = default)
+        {
+            Attachments.RemoveAll(x => x.AttachmentId == attachmentId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeStorage : IFileStorage
+    {
+        public List<string> Saved { get; } = new();
+        public Task<string> SaveAsync(string relativeDir, string extension, Stream content, CancellationToken ct = default)
+        {
+            var path = $"{relativeDir}/{Guid.NewGuid():N}{extension}";
+            Saved.Add(path);
+            return Task.FromResult(path);
+        }
+        public Task<Stream?> OpenReadAsync(string storedPath, CancellationToken ct = default)
+            => Task.FromResult<Stream?>(Saved.Contains(storedPath) ? new MemoryStream(PngBytes) : null);
+        public void Delete(string storedPath) => Saved.Remove(storedPath);
     }
 
     private sealed class FakeResolver : IAssigneeResolver

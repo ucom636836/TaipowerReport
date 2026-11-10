@@ -85,7 +85,47 @@ public sealed class Pr1Repository(IDbConnectionFactory db) : IPr1Repository
                    Improved, NotImprovedReason, ImprovedDate, Verified, VerifyReason, PenaltyTicketNo AS PenaltyTicketNumber
             FROM dbo.Pr1Item WHERE FormId = @id ORDER BY Kind, Ordinal
             """, new { id = form.FormId }, cancellationToken: ct))).AsList();
+
+        // 逐項照片（缺失現況 / 改善後），依項目分派。
+        List<Attachment> photos = (await conn.QueryAsync<Attachment>(new CommandDefinition("""
+            SELECT a.AttachmentId, a.ItemId, a.Category, a.OriginalName, a.StoredName, a.ContentType, a.SizeBytes, a.UploadedBy, a.UploadedAt
+            FROM dbo.Pr1Attachment a JOIN dbo.Pr1Item it ON it.ItemId = a.ItemId
+            WHERE it.FormId = @id ORDER BY a.AttachmentId
+            """, new { id = form.FormId }, cancellationToken: ct))).AsList();
+        foreach (var it in form.Items)
+        {
+            long itemId = it.ItemId;
+            it.BeforePhotos = photos.Where(a => a.ItemId == itemId && !a.IsAfter).ToList();
+            it.AfterPhotos = photos.Where(a => a.ItemId == itemId && a.IsAfter).ToList();
+        }
         return form;
+    }
+
+    public async Task<long> AddAttachmentAsync(Attachment a, CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenAsync(ct);
+        return await conn.ExecuteScalarAsync<long>(new CommandDefinition("""
+            INSERT dbo.Pr1Attachment (ItemId, Category, OriginalName, StoredName, ContentType, SizeBytes, UploadedBy)
+            OUTPUT INSERTED.AttachmentId
+            VALUES (@ItemId, @Category, @OriginalName, @StoredName, @ContentType, @SizeBytes, @UploadedBy)
+            """, new { a.ItemId, a.Category, a.OriginalName, a.StoredName, a.ContentType, a.SizeBytes, a.UploadedBy }, cancellationToken: ct));
+    }
+
+    public async Task<Pr1AttachmentInfo?> GetAttachmentAsync(long attachmentId, CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenAsync(ct);
+        return await conn.QuerySingleOrDefaultAsync<Pr1AttachmentInfo>(new CommandDefinition("""
+            SELECT a.AttachmentId, a.ItemId, it.FormId, a.Category, a.OriginalName, a.StoredName, a.ContentType
+            FROM dbo.Pr1Attachment a JOIN dbo.Pr1Item it ON it.ItemId = a.ItemId
+            WHERE a.AttachmentId = @attachmentId
+            """, new { attachmentId }, cancellationToken: ct));
+    }
+
+    public async Task DeleteAttachmentAsync(long attachmentId, CancellationToken ct = default)
+    {
+        await using var conn = await db.OpenAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            "DELETE dbo.Pr1Attachment WHERE AttachmentId = @attachmentId", new { attachmentId }, cancellationToken: ct));
     }
 
     private static Pr1Form MapForm(dynamic r)

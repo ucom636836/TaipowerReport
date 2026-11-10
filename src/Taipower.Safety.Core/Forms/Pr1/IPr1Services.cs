@@ -28,7 +28,17 @@ public interface IPr1Repository
     Task<IReadOnlyList<Pr1InboxRow>> GetInboxAsync(string employeeId, CancellationToken ct = default);
     Task<IReadOnlyList<Pr1InboxRow>> SearchAsync(Pr1SearchQuery query, string employeeId, bool allScopes, CancellationToken ct = default);
     Task<IReadOnlyList<WorkflowHistoryRow>> GetHistoryAsync(long formId, CancellationToken ct = default);
+
+    // 項目照片（缺失現況 / 改善後）
+    Task<long> AddAttachmentAsync(Attachment attachment, CancellationToken ct = default);
+    Task<Pr1AttachmentInfo?> GetAttachmentAsync(long attachmentId, CancellationToken ct = default);
+    Task DeleteAttachmentAsync(long attachmentId, CancellationToken ct = default);
 }
+
+/// <summary>一張照片的中繼資料，含其所屬表單（供授權與供檔）。</summary>
+public sealed record Pr1AttachmentInfo(
+    long AttachmentId, long ItemId, long FormId, string Category,
+    string OriginalName, string StoredName, string ContentType);
 
 public sealed class Pr1SearchQuery
 {

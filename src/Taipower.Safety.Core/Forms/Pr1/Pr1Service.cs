@@ -19,7 +19,9 @@ public sealed class Pr1Service(
     IPr1Repository repo,
     IAssigneeResolver resolver,
     IEmailSender email,
-    Pr1EmailComposer composer)
+    Pr1EmailComposer composer,
+    IFileStorage files,
+    StorageOptions storage)
 {
     public async Task<Pr1ActionResult> CreateAsync(Pr1CreateRequest req, CurrentUser actor, CancellationToken ct = default)
     {
@@ -119,6 +121,83 @@ public sealed class Pr1Service(
             await NotifyAsync(form, assignee, transition.HistoryLabel ?? "簽核", ct);
 
         return new Pr1ActionResult(true, FormId: form.FormId);
+    }
+
+    /// <summary>上傳一張項目照片（缺失現況 / 改善後）。僅目前處理人可於單進行中時上傳。</summary>
+    public async Task<Pr1ActionResult> AddPhotoAsync(
+        long formId, long itemId, string category, string originalName, long length, Stream content,
+        CurrentUser actor, CancellationToken ct = default)
+    {
+        var form = await repo.GetAsync(formId, ct);
+        if (form is null) return new Pr1ActionResult(false, "找不到此單。");
+        if (form.Status != FormStatus.InProgress) return new Pr1ActionResult(false, "此單已結案或作廢，無法編修照片。");
+        if (actor.EmployeeId != form.CurrentHolderId || actor.EmployeeId != form.PendingRecipientId)
+            return new Pr1ActionResult(false, "您目前不是此單的處理人，無法上傳照片。");
+        if (form.Items.All(i => i.ItemId != itemId))
+            return new Pr1ActionResult(false, "找不到對應的巡查項目。");
+
+        if (length <= 0) return new Pr1ActionResult(false, "檔案是空的。");
+        if (length > storage.MaxFileBytes)
+            return new Pr1ActionResult(false, $"檔案超過上限 {storage.MaxFileBytes / 1024 / 1024} MB。");
+
+        var ext = Path.GetExtension(originalName)?.ToLowerInvariant();
+        if (!ImageContent.IsAllowedExtension(ext))
+            return new Pr1ActionResult(false, "僅允許 JPG / PNG / GIF / WebP 圖片。");
+        if (!await LooksLikeImageAsync(content, ct))
+            return new Pr1ActionResult(false, "檔案內容不是有效的圖片。");
+
+        var stored = await files.SaveAsync($"pr1/{formId}", ext!, content, ct);
+        await repo.AddAttachmentAsync(new Attachment
+        {
+            ItemId = itemId,
+            Category = string.Equals(category, "After", StringComparison.OrdinalIgnoreCase) ? "After" : "Before",
+            OriginalName = SafeName(originalName),
+            StoredName = stored,
+            ContentType = ImageContent.ContentTypeFor(ext!)!,
+            SizeBytes = length,
+            UploadedBy = actor.EmployeeId,
+        }, ct);
+        return new Pr1ActionResult(true, FormId: formId);
+    }
+
+    /// <summary>刪除一張項目照片。僅目前處理人可於單進行中時刪除。</summary>
+    public async Task<Pr1ActionResult> DeletePhotoAsync(long attachmentId, CurrentUser actor, CancellationToken ct = default)
+    {
+        var info = await repo.GetAttachmentAsync(attachmentId, ct);
+        if (info is null) return new Pr1ActionResult(false, "找不到照片。");
+        var form = await repo.GetAsync(info.FormId, ct);
+        if (form is null) return new Pr1ActionResult(false, "找不到此單。");
+        if (form.Status != FormStatus.InProgress
+            || actor.EmployeeId != form.CurrentHolderId || actor.EmployeeId != form.PendingRecipientId)
+            return new Pr1ActionResult(false, "您目前無法刪除此照片。");
+
+        await repo.DeleteAttachmentAsync(attachmentId, ct);
+        files.Delete(info.StoredName);
+        return new Pr1ActionResult(true, FormId: info.FormId);
+    }
+
+    /// <summary>取用一張照片的串流以供顯示/下載（檢視授權由控制器的功能權限把關）。</summary>
+    public async Task<(Stream Stream, string ContentType, string FileName)?> OpenPhotoAsync(long attachmentId, CancellationToken ct = default)
+    {
+        var info = await repo.GetAttachmentAsync(attachmentId, ct);
+        if (info is null) return null;
+        var stream = await files.OpenReadAsync(info.StoredName, ct);
+        return stream is null ? null : (stream, info.ContentType, info.OriginalName);
+    }
+
+    private static async Task<bool> LooksLikeImageAsync(Stream content, CancellationToken ct)
+    {
+        if (!content.CanSeek) return true; // 無法預讀時，已有副檔名把關
+        var head = new byte[12];
+        var read = await content.ReadAsync(head.AsMemory(0, 12), ct);
+        content.Position = 0;
+        return ImageContent.LooksLikeImage(head.AsSpan(0, read));
+    }
+
+    private static string SafeName(string name)
+    {
+        var n = Path.GetFileName(name.Trim());
+        return n.Length > 200 ? n[^200..] : n;
     }
 
     /// <summary>收件人開啟待辦，承接為目前持有人（不改變步驟）。</summary>

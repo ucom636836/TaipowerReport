@@ -56,11 +56,16 @@ public sealed class Pr1Item
 public sealed class Attachment
 {
     public long AttachmentId { get; set; }
-    public string Category { get; set; } = "Before";
+    public long ItemId { get; set; }
+    public string Category { get; set; } = "Before";   // Before 缺失現況 / After 改善後
     public string OriginalName { get; set; } = "";
-    public string StoredName { get; set; } = "";
+    public string StoredName { get; set; } = "";       // 相對於儲存根的路徑
     public string ContentType { get; set; } = "";
     public long SizeBytes { get; set; }
+    public string? UploadedBy { get; set; }
+    public DateTime UploadedAt { get; set; }
+
+    public bool IsAfter => string.Equals(Category, "After", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>一張 Pr1 單的完整狀態 (持久化模型)。</summary>

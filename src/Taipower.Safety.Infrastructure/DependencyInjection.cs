@@ -15,6 +15,9 @@ public static class DependencyInjection
     {
         services.Configure<DatabaseOptions>(config.GetSection(DatabaseOptions.Section));
         services.Configure<EmailOptions>(config.GetSection(EmailOptions.Section));
+        services.Configure<StorageOptions>(config.GetSection(StorageOptions.Section));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<StorageOptions>>().Value);
+        services.AddSingleton<IFileStorage, FileStorage>();
 
         services.AddSingleton<IDbConnectionFactory, SqlConnectionFactory>();
         services.AddScoped<IAccountRepository, AccountRepository>();

@@ -39,6 +39,47 @@
                         else if (it.Improved == false) { <span class="text-danger">未改善：@it.NotImprovedReason</span> }
                         @if (it.Verified == true) { <span class="badge bg-success">查證通過</span> }
                         else if (it.Verified == false) { <span class="badge bg-danger">查證未過</span> }
+
+                        @{ var hasPhotos = it.BeforePhotos.Any() || it.AfterPhotos.Any(); }
+                        @if (hasPhotos || Model.CanAct)
+                        {
+                            <div class="d-flex flex-wrap gap-2 mt-2">
+                                @foreach (var (photos, label, border) in new[] { (it.BeforePhotos, "改善前", "#dc3545"), (it.AfterPhotos, "改善後", "#198754") })
+                                {
+                                    foreach (var ph in photos)
+                                    {
+                                        <figure class="m-0 text-center" style="width:80px">
+                                            <a href="@Url.Action("Photo", new { id = ph.AttachmentId })" target="_blank" title="@ph.OriginalName">
+                                                <img src="@Url.Action("Photo", new { id = ph.AttachmentId })" alt="@label"
+                                                     style="height:72px;width:72px;object-fit:cover;border:2px solid @border;border-radius:4px" />
+                                            </a>
+                                            <figcaption class="small" style="color:@border">@label</figcaption>
+                                            @if (Model.CanAct)
+                                            {
+                                                <form asp-action="DeletePhoto" method="post" onsubmit="return confirm('刪除這張照片？')" class="d-inline">
+                                                    <input type="hidden" name="formId" value="@f.FormId" />
+                                                    <input type="hidden" name="attachmentId" value="@ph.AttachmentId" />
+                                                    <button type="submit" class="btn btn-link btn-sm text-danger p-0" style="font-size:.75rem">刪除</button>
+                                                </form>
+                                            }
+                                        </figure>
+                                    }
+                                }
+                            </div>
+                            @if (Model.CanAct)
+                            {
+                                <form asp-action="UploadPhoto" method="post" enctype="multipart/form-data" class="d-flex gap-1 align-items-center mt-1 flex-wrap">
+                                    <input type="hidden" name="formId" value="@f.FormId" />
+                                    <input type="hidden" name="itemId" value="@it.ItemId" />
+                                    <select name="category" class="form-select form-select-sm" style="width:auto">
+                                        <option value="Before">改善前</option>
+                                        <option value="After">改善後</option>
+                                    </select>
+                                    <input type="file" name="file" accept="image/jpeg,image/png,image/gif,image/webp" class="form-control form-control-sm" style="width:auto" required />
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm">上傳</button>
+                                </form>
+                            }
+                        }
                     </td>
                 }
             </tr>
