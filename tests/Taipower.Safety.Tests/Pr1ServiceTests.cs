@@ -1,0 +1,355 @@
+using Taipower.Safety.Core.Common;
+using Taipower.Safety.Core.Forms.Pr1;
+using Taipower.Safety.Core.Org;
+using Taipower.Safety.Core.Reference;
+using Xunit;
+
+namespace Taipower.Safety.Tests;
+
+/// <summary>
+/// Pr1Service 編排邏輯的單元測試（以 fake 取代持久化／指派解析／郵件，不需 DB）。
+/// 聚焦於流程引擎以外、服務層自己的決策：建單驗證、授權、派單寫入、
+/// 旗標記錄，以及 C6「下一關位置與人員一起算」的覆寫。
+/// </summary>
+public class Pr1ServiceTests
+{
+    // ---- 共用資料 ----
+    private static readonly DateTime Today = new(2026, 11, 11);
+
+    private static CurrentUser User(string id, string name = "測試員") =>
+        new(id, name, "69", null, 5, 3, new HashSet<int>());
+
+    private static Employee Emp(string id, string name = "某人") =>
+        new() { EmployeeId = id, Name = name, Email = $"{id}@test.local" };
+
+    private static Pr1CreateRequest ValidCreate(IReadOnlyList<Pr1Item>? items = null) => new(
+        PatrolType: PatrolType.Safety, PatrolDate: Today, ProjectId: 1, ContractorId: 2,
+        LeaderId: "LEAD", TeamMembers: null, ImproveGroupId: null,
+        Items: items ?? [new Pr1Item { Kind = ItemKind.Con, Description = "未戴安全帽" }]);
+
+    private static (Pr1Service svc, FakePr1Repository repo, FakeResolver resolver, FakeEmail email) Build()
+    {
+        var repo = new FakePr1Repository();
+        var resolver = new FakeResolver();
+        var email = new FakeEmail();
+        var composer = new Pr1EmailComposer(new FakeRefs()) { PublicBaseUrl = () => "http://test/" };
+        var svc = new Pr1Service(repo, resolver, new FakeOrg(), email, composer);
+        return (svc, repo, resolver, email);
+    }
+
+    // ---- 建單 ----
+
+    [Fact]
+    public async Task Create_valid_stores_form_at_desk_and_notifies()
+    {
+        var (svc, repo, resolver, email) = Build();
+        resolver.Default = Emp("DESK", "登記桌");
+
+        var result = await svc.CreateAsync(ValidCreate(), User("MAKER"));
+
+        Assert.True(result.Ok, result.Error);
+        var form = repo.Get(result.FormId);
+        Assert.Equal(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted), form.Step);
+        Assert.Equal("MAKER", form.CreatedBy);
+        Assert.Equal("DESK", form.PendingRecipientId);
+        Assert.False(string.IsNullOrEmpty(form.FormNumber));
+        Assert.Single(email.Sent);
+    }
+
+    [Fact]
+    public async Task Create_rejects_empty_items()
+    {
+        var (svc, _, resolver, _) = Build();
+        resolver.Default = Emp("DESK");
+        var result = await svc.CreateAsync(ValidCreate(items: []), User("MAKER"));
+        Assert.False(result.Ok);
+    }
+
+    [Fact]
+    public async Task Create_rejects_unknown_patrol_type()
+    {
+        var (svc, _, resolver, _) = Build();
+        resolver.Default = Emp("DESK");
+        var bad = ValidCreate() with { PatrolType = "ZZ" };
+        var result = await svc.CreateAsync(bad, User("MAKER"));
+        Assert.False(result.Ok);
+    }
+
+    [Fact]
+    public async Task Create_fails_when_no_safety_desk_found()
+    {
+        var (svc, _, resolver, _) = Build();
+        resolver.Default = null; // 工安組查無登記桌
+        var result = await svc.CreateAsync(ValidCreate(), User("MAKER"));
+        Assert.False(result.Ok);
+        Assert.Contains("登記桌", result.Error);
+    }
+
+    // ---- 授權 ----
+
+    [Fact]
+    public async Task Act_rejects_user_who_is_not_holder_or_recipient()
+    {
+        var (svc, repo, _, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
+            holder: "DESK", pending: "DESK"));
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.AssignOfficer, null, SpecificPersonId: "OFF"),
+            User("OUTSIDER"));
+        Assert.False(result.Ok);
+        Assert.Contains("處理人", result.Error);
+    }
+
+    [Fact]
+    public async Task Act_rejects_action_not_allowed_in_current_step()
+    {
+        var (svc, repo, _, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
+            holder: "OFF", pending: "OFF"));
+        // 經辦關不允許「核可」
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, null), User("OFF"));
+        Assert.False(result.Ok);
+    }
+
+    [Fact]
+    public async Task Act_rejects_already_closed_form()
+    {
+        var (svc, repo, _, _) = Build();
+        var form = FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Submitted), holder: "DIR", pending: "DIR");
+        form.Status = FormStatus.Closed;
+        repo.Seed(form);
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, null), User("DIR"));
+        Assert.False(result.Ok);
+        Assert.Contains("結案或作廢", result.Error);
+    }
+
+    // ---- 派單 / 旗標寫入 ----
+
+    [Fact]
+    public async Task Act_assign_officer_records_officer_and_advances_step()
+    {
+        var (svc, repo, _, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Assign, Transit.Submitted),
+            holder: "DESK", pending: "DESK"));
+
+        var result = await svc.ActAsync(
+            new Pr1ActionRequest(1, Pr1Action.AssignOfficer, null, SpecificPersonId: "OFF1"), User("DESK"));
+
+        Assert.True(result.Ok, result.Error);
+        var form = repo.Get(1);
+        Assert.Equal(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Submitted), form.Step);
+        Assert.Equal("OFF1", form.SafetyOfficerId);
+        Assert.Equal("OFF1", form.PendingRecipientId);
+    }
+
+    [Fact]
+    public async Task Act_officer_submit_with_jump_goes_to_manager_and_sets_jump_flag()
+    {
+        var (svc, repo, resolver, _) = Build();
+        resolver.Default = Emp("MGR", "經理");
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working),
+            holder: "OFF1", pending: "OFF1"));
+
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Submit, "意見", IsJump: true), User("OFF1"));
+
+        Assert.True(result.Ok, result.Error);
+        var form = repo.Get(1);
+        Assert.Equal(Position.Manager, form.Step.Position);
+        Assert.True(form.IsJump);
+        Assert.Equal("OFF1", form.SafetyOfficerId);   // 經辦本人被記為簽核經辦
+        Assert.Equal("MGR", form.PendingRecipientId);
+    }
+
+    // ---- C6 長官鏈：位置與人員須一起推進 ----
+
+    [Fact]
+    public async Task Act_leader_close_resolves_next_approver_and_overrides_position()
+    {
+        var (svc, repo, resolver, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
+            holder: "LEAD", pending: "LEAD"));
+        // 去重後下一關是「工程副處長」
+        resolver.ApprovalNext = (Position.DeputyEng, Emp("DENG", "工程副處長"));
+
+        var result = await svc.ActAsync(
+            new Pr1ActionRequest(1, Pr1Action.CloseDecision, null, AgreeClose: true), User("LEAD"));
+
+        Assert.True(result.Ok, result.Error);
+        var form = repo.Get(1);
+        Assert.Equal(Position.DeputyEng, form.Step.Position);   // To.Position 被 resolver 覆寫
+        Assert.Equal("DENG", form.PendingRecipientId);
+    }
+
+    [Fact]
+    public async Task Act_next_approver_missing_person_fails()
+    {
+        var (svc, repo, resolver, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Leader, Transit.Working),
+            holder: "LEAD", pending: "LEAD"));
+        resolver.ApprovalNext = (Position.DeputyEng, null); // 查無副處長／處長
+
+        var result = await svc.ActAsync(
+            new Pr1ActionRequest(1, Pr1Action.CloseDecision, null, AgreeClose: true), User("LEAD"));
+
+        Assert.False(result.Ok);
+        Assert.Contains("長官", result.Error);
+    }
+
+    [Fact]
+    public async Task Act_director_approve_closes_form_without_email()
+    {
+        var (svc, repo, resolver, email) = Build();
+        resolver.Default = Emp("DIR", "處長");
+        repo.Seed(FormAt(new Pr1Step(Stage.Approval, Position.Director, Transit.Working),
+            holder: "DIR", pending: "DIR"));
+
+        var result = await svc.ActAsync(new Pr1ActionRequest(1, Pr1Action.Approve, "准"), User("DIR"));
+
+        Assert.True(result.Ok, result.Error);
+        Assert.Equal(FormStatus.Closed, repo.Get(1).Status);
+        Assert.Empty(email.Sent);   // 核可結案不再寄信
+    }
+
+    // ---- 承接 ----
+
+    [Fact]
+    public async Task Open_takes_over_as_holder_without_changing_stage()
+    {
+        var (svc, repo, _, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Submitted),
+            holder: "DESK", pending: "OFF1"));
+
+        await svc.OpenAsync(1, User("OFF1"));
+
+        var form = repo.Get(1);
+        Assert.Equal("OFF1", form.CurrentHolderId);
+        Assert.Equal(Stage.SafetyReview, form.Step.Stage);
+        Assert.Equal(Transit.Working, form.Step.Transit);
+    }
+
+    // ---- helpers ----
+
+    private static Pr1Form FormAt(Pr1Step step, string holder, string pending) => new()
+    {
+        FormId = 1,
+        FormNumber = "SI-1151111-01-0",
+        Step = step,
+        Status = FormStatus.InProgress,
+        CurrentHolderId = holder,
+        PendingRecipientId = pending,
+        PatrolType = PatrolType.Safety,
+        PatrolDate = Today,
+        ProjectId = 1,
+        ContractorId = 2,
+        LeaderId = "LEAD",
+        CreatedBy = "MAKER",
+    };
+
+    // ================= fakes =================
+
+    private sealed class FakePr1Repository : IPr1Repository
+    {
+        private readonly Dictionary<long, Pr1Form> _forms = new();
+        private long _seq;
+        private int _num;
+
+        public Pr1Form Get(long id) => _forms[id];
+        public void Seed(Pr1Form form) => _forms[form.FormId] = form;
+
+        public Task<string> NextFormNumberAsync(string patrolType, DateTime date, CancellationToken ct = default)
+            => Task.FromResult($"{patrolType}-{date:yyMMdd}-{++_num:00}-0");
+
+        public Task<long> CreateAsync(Pr1Form form, string actorTitle, CancellationToken ct = default)
+        {
+            form.FormId = ++_seq;
+            _forms[form.FormId] = form;
+            return Task.FromResult(form.FormId);
+        }
+
+        public Task<Pr1Form?> GetAsync(long formId, CancellationToken ct = default)
+            => Task.FromResult(_forms.TryGetValue(formId, out var f) ? f : null);
+
+        public Task<Pr1Form?> GetByNumberAsync(string formNumber, CancellationToken ct = default)
+            => Task.FromResult<Pr1Form?>(null);
+
+        // 仿真實 repo：套用轉移後更新步驟 / 狀態 / 重會次數。
+        public Task ApplyTransitionAsync(Pr1Form form, Pr1Transition transition, string actorId, string actorTitle,
+            string? comment, CancellationToken ct = default)
+        {
+            form.Step = transition.To;
+            form.Status = transition.Status;
+            if (transition.IncrementRevision) form.Revision++;
+            _forms[form.FormId] = form;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<Pr1InboxRow>> GetInboxAsync(string employeeId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Pr1InboxRow>>([]);
+        public Task<IReadOnlyList<Pr1InboxRow>> SearchAsync(Pr1SearchQuery query, string employeeId, bool allScopes, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<Pr1InboxRow>>([]);
+        public Task<IReadOnlyList<WorkflowHistoryRow>> GetHistoryAsync(long formId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<WorkflowHistoryRow>>([]);
+    }
+
+    private sealed class FakeResolver : IAssigneeResolver
+    {
+        /// <summary>一般規則解析出的員工（null = 查無）。</summary>
+        public Employee? Default { get; set; } = Emp("NEXT", "下一關");
+        /// <summary>C6 下一位批示者（位置 + 人員）。</summary>
+        public (Position Position, Employee? Approver)? ApprovalNext { get; set; }
+
+        public Task<Employee?> ResolveAsync(Pr1Form form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default)
+            => Task.FromResult(rule switch
+            {
+                AssigneeRule.None => null,
+                AssigneeRule.SpecificPerson => specificPersonId is null ? null : Emp(specificPersonId),
+                AssigneeRule.Self => form.CurrentHolderId is null ? null : Emp(form.CurrentHolderId),
+                AssigneeRule.NextApprover => (ApprovalNext ?? (Position.Director, Default)).Item2,
+                _ => Default,
+            });
+
+        public Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(Pr1Form form, CancellationToken ct = default)
+            => Task.FromResult(ApprovalNext ?? (Position.Director, Default));
+    }
+
+    private sealed class FakeEmail : IEmailSender
+    {
+        public List<EmailMessage> Sent { get; } = new();
+        public Task SendAsync(EmailMessage message, CancellationToken ct = default)
+        {
+            Sent.Add(message);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeRefs : IReferenceRepository
+    {
+        public Task<EngineeringProject?> GetProjectAsync(int projectId, CancellationToken ct = default) => Task.FromResult<EngineeringProject?>(null);
+        public Task<Contractor?> GetContractorAsync(int contractorId, CancellationToken ct = default) => Task.FromResult<Contractor?>(null);
+        public Task<IReadOnlyList<EngineeringProject>> GetProjectsAsync(bool activeOnly = true, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<EngineeringProject>>([]);
+        public Task<int> SaveProjectAsync(EngineeringProject project, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<IReadOnlyList<Contractor>> GetContractorsAsync(int? projectId = null, bool activeOnly = true, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Contractor>>([]);
+        public Task<int> SaveContractorAsync(Contractor contractor, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<IReadOnlyList<Hazard>> GetHazardsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Hazard>>([]);
+        public Task<IReadOnlyList<DeficiencyType>> GetDeficiencyTypesAsync(int? hazardId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DeficiencyType>>([]);
+        public Task<IReadOnlyList<DeficiencyItem>> GetDeficiencyItemsAsync(int? typeId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<DeficiencyItem>>([]);
+        public Task<int> SaveHazardAsync(Hazard hazard, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> SaveDeficiencyTypeAsync(DeficiencyType type, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<int> SaveDeficiencyItemAsync(DeficiencyItem item, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<IReadOnlyList<PenaltyVersion>> GetPenaltyVersionsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<PenaltyVersion>>([]);
+    }
+
+    private sealed class FakeOrg : IOrgRepository
+    {
+        public Task<Employee?> GetEmployeeAsync(string employeeId, CancellationToken ct = default) => Task.FromResult<Employee?>(Emp(employeeId));
+        public Task<IReadOnlyList<OrgGroup>> GetGroupsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgGroup>>([]);
+        public Task<IReadOnlyList<OrgSection>> GetSectionsAsync(string? groupId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgSection>>([]);
+        public Task<IReadOnlyList<OrgRank>> GetRanksAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgRank>>([]);
+        public Task<IReadOnlyList<OrgRole>> GetRolesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgRole>>([]);
+        public Task SaveGroupAsync(OrgGroup group, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SaveSectionAsync(OrgSection section, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SaveRankAsync(OrgRank rank, CancellationToken ct = default) => Task.CompletedTask;
+        public Task SaveRoleAsync(OrgRole role, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<IReadOnlyList<Employee>> FindEmployeesAsync(EmployeeQuery query, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Employee>>([]);
+        public Task SaveEmployeeAsync(Employee employee, string actorId, CancellationToken ct = default) => Task.CompletedTask;
+    }
+}
