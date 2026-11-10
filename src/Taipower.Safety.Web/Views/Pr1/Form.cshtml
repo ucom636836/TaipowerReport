@@ -89,6 +89,71 @@
     </table>
 }
 
+@if (Model.CanAct && f.Step.Position == Position.Officer && (f.Step.Stage == Stage.Improvement || f.Step.Stage == Stage.Verification))
+{
+    var isImprove = f.Step.Stage == Stage.Improvement;
+    var cons = Model.Cons.ToList();
+    <div class="card my-4 border-primary">
+        <div class="card-header">@(isImprove ? "逐項改善結果（C4 經辦組處理改善）" : "逐項查證結果（C5 工安組查證）")</div>
+        <div class="card-body">
+            @if (cons.Count == 0)
+            {
+                <p class="text-muted mb-0">本單無缺點項目，無需填寫。</p>
+            }
+            else
+            {
+                <form asp-action="SaveItemResults" method="post">
+                    <input type="hidden" name="formId" value="@f.FormId" />
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:3rem">#</th><th>缺點敘述</th>
+                                @if (isImprove) { <th style="width:8rem">改善情形</th><th style="width:10rem">改善日期</th><th>未改善原因</th> }
+                                else { <th style="width:8rem">查證結果</th><th>查證說明</th> }
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @for (var i = 0; i < cons.Count; i++)
+                        {
+                            var it = cons[i];
+                            <tr>
+                                <td>@it.Ordinal</td>
+                                <td>@it.Description<input type="hidden" name="items[@i].ItemId" value="@it.ItemId" /></td>
+                                @if (isImprove)
+                                {
+                                    <td>
+                                        <select name="items[@i].Improved" class="form-select form-select-sm">
+                                            <option value="">未填</option>
+                                            <option value="true" selected="@(it.Improved == true)">改善完成</option>
+                                            <option value="false" selected="@(it.Improved == false)">未改善</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="date" name="items[@i].ImprovedDate" value="@(it.ImprovedDate?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" /></td>
+                                    <td><input name="items[@i].NotImprovedReason" value="@it.NotImprovedReason" maxlength="300" class="form-control form-control-sm" placeholder="若未改善，請說明" /></td>
+                                }
+                                else
+                                {
+                                    <td>
+                                        <select name="items[@i].Verified" class="form-select form-select-sm">
+                                            <option value="">未填</option>
+                                            <option value="true" selected="@(it.Verified == true)">查證通過</option>
+                                            <option value="false" selected="@(it.Verified == false)">查證未過</option>
+                                        </select>
+                                    </td>
+                                    <td><input name="items[@i].VerifyReason" value="@it.VerifyReason" maxlength="300" class="form-control form-control-sm" placeholder="查證說明" /></td>
+                                }
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                    <button type="submit" class="btn btn-primary btn-sm">儲存@(isImprove ? "改善" : "查證")結果</button>
+                    <span class="text-muted small ms-2">可多次儲存；完成後再按下方「送出 / 上呈」繼續流程。</span>
+                </form>
+            }
+        </div>
+    </div>
+}
+
 @if (Model.CanAct)
 {
     <div class="card my-4">

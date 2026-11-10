@@ -128,6 +128,31 @@ public sealed class Pr1Repository(IDbConnectionFactory db) : IPr1Repository
             "DELETE dbo.Pr1Attachment WHERE AttachmentId = @attachmentId", new { attachmentId }, cancellationToken: ct));
     }
 
+    public async Task UpdateItemResultsAsync(long formId, Stage stage, IReadOnlyList<Pr1ItemResult> results, CancellationToken ct = default)
+    {
+        // 依階段只更新對應欄位：C4 改善 / C5 查證。FormId 一併比對，避免跨單竄改。
+        var sql = stage == Stage.Improvement
+            ? """
+              UPDATE dbo.Pr1Item SET Improved = @Improved, NotImprovedReason = @NotImprovedReason, ImprovedDate = @ImprovedDate
+              WHERE ItemId = @ItemId AND FormId = @formId AND Kind = 1
+              """
+            : """
+              UPDATE dbo.Pr1Item SET Verified = @Verified, VerifyReason = @VerifyReason
+              WHERE ItemId = @ItemId AND FormId = @formId AND Kind = 1
+              """;
+        await using var conn = await db.OpenAsync(ct);
+        await conn.InTransactionAsync(async tx =>
+        {
+            foreach (var r in results)
+                await conn.ExecuteAsync(sql, new
+                {
+                    formId, r.ItemId,
+                    r.Improved, r.NotImprovedReason, r.ImprovedDate,
+                    r.Verified, r.VerifyReason,
+                }, tx);
+        });
+    }
+
     private static Pr1Form MapForm(dynamic r)
     {
         var form = new Pr1Form

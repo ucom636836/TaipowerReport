@@ -176,6 +176,29 @@ public sealed class Pr1Service(
         return new Pr1ActionResult(true, FormId: info.FormId);
     }
 
+    /// <summary>
+    /// 儲存逐項 C4 改善結果 / C5 查證結果。僅目前處理人（經辦關）可於改善/查證階段編修；
+    /// 依目前階段只更新對應欄位，不改變流程步驟（上呈仍走 Submit）。
+    /// </summary>
+    public async Task<Pr1ActionResult> SaveItemResultsAsync(
+        long formId, IReadOnlyList<Pr1ItemResult> results, CurrentUser actor, CancellationToken ct = default)
+    {
+        var form = await repo.GetAsync(formId, ct);
+        if (form is null) return new Pr1ActionResult(false, "找不到此單。");
+        if (form.Status != FormStatus.InProgress) return new Pr1ActionResult(false, "此單已結案或作廢，無法編修。");
+        if (actor.EmployeeId != form.CurrentHolderId || actor.EmployeeId != form.PendingRecipientId)
+            return new Pr1ActionResult(false, "您目前不是此單的處理人。");
+        if (form.Step.Position != Position.Officer || form.Step.Stage is not (Stage.Improvement or Stage.Verification))
+            return new Pr1ActionResult(false, "目前階段不可輸入改善 / 查證結果。");
+
+        var itemIds = form.Items.Select(i => i.ItemId).ToHashSet();
+        var valid = results.Where(r => itemIds.Contains(r.ItemId)).ToList();
+        if (valid.Count == 0) return new Pr1ActionResult(false, "沒有可儲存的項目。");
+
+        await repo.UpdateItemResultsAsync(formId, form.Step.Stage, valid, ct);
+        return new Pr1ActionResult(true, FormId: formId);
+    }
+
     /// <summary>取用一張照片的串流以供顯示/下載（檢視授權由控制器的功能權限把關）。</summary>
     public async Task<(Stream Stream, string ContentType, string FileName)?> OpenPhotoAsync(long attachmentId, CancellationToken ct = default)
     {

@@ -78,6 +78,16 @@ public sealed class Pr1FormViewModel
     public IEnumerable<Pr1Item> Recommends => Form.Items.Where(i => i.Kind == ItemKind.Recommend);
 }
 
+public sealed class Pr1ItemResultInput
+{
+    public long ItemId { get; set; }
+    public bool? Improved { get; set; }
+    public string? NotImprovedReason { get; set; }
+    [DataType(DataType.Date)] public DateTime? ImprovedDate { get; set; }
+    public bool? Verified { get; set; }
+    public string? VerifyReason { get; set; }
+}
+
 public sealed class Pr1ActRequest
 {
     public long FormId { get; set; }

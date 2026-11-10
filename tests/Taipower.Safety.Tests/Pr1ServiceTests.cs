@@ -340,6 +340,68 @@ public class Pr1ServiceTests
         Assert.Single(repo.Attachments);
     }
 
+    // ---- 逐項 C4 改善 / C5 查證結果 ----
+
+    [Fact]
+    public async Task SaveItemResults_at_improvement_records_improve_fields()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem()); // Improvement / Officer
+
+        var r = await svc.SaveItemResultsAsync(1,
+            [new Pr1ItemResult(10, Improved: true, NotImprovedReason: null, ImprovedDate: new DateTime(2026, 11, 11), Verified: null, VerifyReason: null)],
+            User("OFF"));
+
+        Assert.True(r.Ok, r.Error);
+        var it = repo.Get(1).Items.Single();
+        Assert.True(it.Improved);
+        Assert.Equal(new DateTime(2026, 11, 11), it.ImprovedDate);
+    }
+
+    [Fact]
+    public async Task SaveItemResults_at_verification_records_verify_fields()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(FormAt(new Pr1Step(Stage.Verification, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
+
+        var r = await svc.SaveItemResultsAsync(1,
+            [new Pr1ItemResult(10, Improved: null, NotImprovedReason: null, ImprovedDate: null, Verified: false, VerifyReason: "尚未完成")],
+            User("OFF"));
+
+        Assert.True(r.Ok, r.Error);
+        var it = repo.Get(1).Items.Single();
+        Assert.False(it.Verified);
+        Assert.Equal("尚未完成", it.VerifyReason);
+    }
+
+    [Fact]
+    public async Task SaveItemResults_rejects_non_holder()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.SaveItemResultsAsync(1, [new Pr1ItemResult(10, true, null, null, null, null)], User("OUTSIDER"));
+        Assert.False(r.Ok);
+    }
+
+    [Fact]
+    public async Task SaveItemResults_rejects_wrong_stage()
+    {
+        var (svc, repo, _, _, _) = Build();
+        // 工安組簽註階段 (C3) 的經辦不可填改善 / 查證結果
+        repo.Seed(FormAt(new Pr1Step(Stage.SafetyReview, Position.Officer, Transit.Working), holder: "OFF", pending: "OFF"));
+        var r = await svc.SaveItemResultsAsync(1, [new Pr1ItemResult(10, true, null, null, null, null)], User("OFF"));
+        Assert.False(r.Ok);
+    }
+
+    [Fact]
+    public async Task SaveItemResults_rejects_when_no_known_item()
+    {
+        var (svc, repo, _, _, _) = Build();
+        repo.Seed(HolderFormWithItem());
+        var r = await svc.SaveItemResultsAsync(1, [new Pr1ItemResult(999, true, null, null, null, null)], User("OFF"));
+        Assert.False(r.Ok);
+    }
+
     // ---- helpers ----
 
     private static Pr1Form FormAt(Pr1Step step, string holder, string pending) => new()
@@ -426,6 +488,28 @@ public class Pr1ServiceTests
         public Task DeleteAttachmentAsync(long attachmentId, CancellationToken ct = default)
         {
             Attachments.RemoveAll(x => x.AttachmentId == attachmentId);
+            return Task.CompletedTask;
+        }
+
+        public Task UpdateItemResultsAsync(long formId, Stage stage, IReadOnlyList<Pr1ItemResult> results, CancellationToken ct = default)
+        {
+            if (_forms.TryGetValue(formId, out var form))
+                foreach (var r in results)
+                {
+                    var it = form.Items.FirstOrDefault(i => i.ItemId == r.ItemId);
+                    if (it is null) continue;
+                    if (stage == Stage.Improvement)
+                    {
+                        it.Improved = r.Improved;
+                        it.NotImprovedReason = r.NotImprovedReason;
+                        it.ImprovedDate = r.ImprovedDate;
+                    }
+                    else
+                    {
+                        it.Verified = r.Verified;
+                        it.VerifyReason = r.VerifyReason;
+                    }
+                }
             return Task.CompletedTask;
         }
     }

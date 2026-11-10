@@ -101,6 +101,19 @@ public sealed class Pr1Controller(
         return RedirectToAction(nameof(Form), new { id = req.FormId });
     }
 
+    // ----- 逐項 C4 改善結果 / C5 查證結果 -----
+    [RequireFeature(Features.Pr1HandlerProcess, Features.Pr1Verify), HttpPost]
+    public async Task<IActionResult> SaveItemResults(long formId, List<Pr1ItemResultInput> items, CancellationToken ct)
+    {
+        var results = (items ?? [])
+            .Select(i => new Pr1ItemResult(i.ItemId, i.Improved, i.NotImprovedReason?.Trim(), i.ImprovedDate, i.Verified, i.VerifyReason?.Trim()))
+            .ToList();
+        var result = await service.SaveItemResultsAsync(formId, results, Me, ct);
+        await AuditAsync("工安巡查-儲存改善/查證結果", formId.ToString(), result.Ok ? "成功" : result.Error, result.Ok);
+        Flash(result.Ok ? "已儲存。" : result.Error!, result.Ok ? "success" : "danger");
+        return RedirectToAction(nameof(Form), new { id = formId });
+    }
+
     // ----- 項目照片（缺失現況 / 改善後）-----
     [RequireFeature(Features.Pr1SafetyReview, Features.Pr1HandlerProcess, Features.Pr1Verify), HttpPost]
     [RequestSizeLimit(20_000_000)]
