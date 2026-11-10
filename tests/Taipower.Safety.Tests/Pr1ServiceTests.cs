@@ -33,7 +33,7 @@ public class Pr1ServiceTests
         var resolver = new FakeResolver();
         var email = new FakeEmail();
         var composer = new Pr1EmailComposer(new FakeRefs()) { PublicBaseUrl = () => "http://test/" };
-        var svc = new Pr1Service(repo, resolver, new FakeOrg(), email, composer);
+        var svc = new Pr1Service(repo, resolver, email, composer);
         return (svc, repo, resolver, email);
     }
 
@@ -336,20 +336,5 @@ public class Pr1ServiceTests
         public Task<int> SaveDeficiencyTypeAsync(DeficiencyType type, CancellationToken ct = default) => Task.FromResult(0);
         public Task<int> SaveDeficiencyItemAsync(DeficiencyItem item, CancellationToken ct = default) => Task.FromResult(0);
         public Task<IReadOnlyList<PenaltyVersion>> GetPenaltyVersionsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<PenaltyVersion>>([]);
-    }
-
-    private sealed class FakeOrg : IOrgRepository
-    {
-        public Task<Employee?> GetEmployeeAsync(string employeeId, CancellationToken ct = default) => Task.FromResult<Employee?>(Emp(employeeId));
-        public Task<IReadOnlyList<OrgGroup>> GetGroupsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgGroup>>([]);
-        public Task<IReadOnlyList<OrgSection>> GetSectionsAsync(string? groupId = null, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgSection>>([]);
-        public Task<IReadOnlyList<OrgRank>> GetRanksAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgRank>>([]);
-        public Task<IReadOnlyList<OrgRole>> GetRolesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<OrgRole>>([]);
-        public Task SaveGroupAsync(OrgGroup group, CancellationToken ct = default) => Task.CompletedTask;
-        public Task SaveSectionAsync(OrgSection section, CancellationToken ct = default) => Task.CompletedTask;
-        public Task SaveRankAsync(OrgRank rank, CancellationToken ct = default) => Task.CompletedTask;
-        public Task SaveRoleAsync(OrgRole role, CancellationToken ct = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<Employee>> FindEmployeesAsync(EmployeeQuery query, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Employee>>([]);
-        public Task SaveEmployeeAsync(Employee employee, string actorId, CancellationToken ct = default) => Task.CompletedTask;
     }
 }

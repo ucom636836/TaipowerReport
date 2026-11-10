@@ -18,7 +18,6 @@ public sealed record Pr1ActionResult(bool Ok, string? Error = null, long FormId 
 public sealed class Pr1Service(
     IPr1Repository repo,
     IAssigneeResolver resolver,
-    IOrgRepository org,
     IEmailSender email,
     Pr1EmailComposer composer)
 {
