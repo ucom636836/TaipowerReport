@@ -17,6 +17,17 @@ public static class Features
     public const int Pr1Approve = 108;          // 長官覆核批示
     public const int Pr1Query = 199;            // 查詢
 
+    public const int Pr2 = 210;                 // 工安查核紀錄追蹤表
+    public const int Pr2Create = 211;           // 開單
+    public const int Pr2SafetyDispatch = 212;   // 工安組簽註意見-派單
+    public const int Pr2SafetyReview = 213;     // 工安組簽註意見
+    public const int Pr2HandlerDispatch = 214;  // 經辦組改善或處理-派單
+    public const int Pr2HandlerProcess = 215;   // 經辦組改善或處理
+    public const int Pr2VerifyDispatch = 216;   // 工安組查證結果-派單
+    public const int Pr2Verify = 217;           // 工安組查證結果
+    public const int Pr2Approve = 218;          // 長官覆核批示
+    public const int Pr2Query = 219;            // 查詢
+
     public const int Pr5 = 200;                 // 工程罰款管理
     public const int Pr5Create = 201;           // 開立罰單
     public const int Pr5Query = 299;            // 查詢

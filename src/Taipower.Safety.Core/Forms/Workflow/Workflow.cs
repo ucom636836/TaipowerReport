@@ -1,3 +1,5 @@
+using Taipower.Safety.Core.Org;
+
 namespace Taipower.Safety.Core.Forms.Workflow;
 
 /// <summary>簽核階段 (legacy C1..C6)。各表單 (Pr1/Pr2/…) 共用。</summary>
@@ -112,6 +114,26 @@ public sealed record WorkflowActionContext
 /// resolver 只依賴這組欄位決定下一關領單人，因此 Pr1/Pr2 等表單
 /// 各自以自己的欄位實作此介面，即可共用同一套 <see cref="AssigneeResolver"/>。
 /// </summary>
+/// <summary>簽核歷程一列（取代 legacy 的 *_OpinionStr 疊字串）。各表單共用。</summary>
+public sealed record WorkflowHistoryRow(
+    DateTime OccurredAt, string? ActorTitle, string Action, string? FromStep, string ToStep, string? Comment);
+
+/// <summary>把流程引擎決定的 <see cref="AssigneeRule"/> 解析成實際員工。Pr1/Pr2 等表單共用。</summary>
+public interface IAssigneeResolver
+{
+    /// <summary>
+    /// 解析下一關領單人。<paramref name="specificPersonId"/> 用於派單 (SpecificPerson)。
+    /// 回傳 null 代表查無合適人員 (呼叫端須擋下並提示)。
+    /// </summary>
+    Task<Employee?> ResolveAsync(IWorkflowForm form, AssigneeRule rule, string actorId, string? specificPersonId, CancellationToken ct = default);
+
+    /// <summary>
+    /// C6 長官鏈：依目前位置與去重規則，算出下一位批示者與其對應關卡位置。
+    /// 領隊同意結案 / 副處長批示後呼叫；可能因去重而跳過某一層直接到處長。
+    /// </summary>
+    Task<(Position Position, Employee? Approver)> ResolveApprovalNextAsync(IWorkflowForm form, CancellationToken ct = default);
+}
+
 public interface IWorkflowForm
 {
     WorkflowStep Step { get; }

@@ -9,7 +9,7 @@
 }
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1 class="h4 mb-0">工安巡查紀錄表 <small class="text-muted">@f.DisplayNumber</small></h1>
-    <span class="badge bg-info text-dark fs-6">@Pr1Display.StepName(f.Step, f.Status)</span>
+    <span class="badge bg-info text-dark fs-6">@WorkflowDisplay.StepName(f.Step, f.Status)</span>
 </div>
 
 <dl class="row">
@@ -225,7 +225,7 @@
                         var cls = a is WorkflowAction.Approve ? "btn-success"
                             : a.ToString().StartsWith("Return") || a is WorkflowAction.Reject ? "btn-outline-danger"
                             : "btn-primary";
-                        <button type="submit" name="Action" value="@a" class="btn @cls me-2 mb-2">@Pr1Display.ActionName(a)</button>
+                        <button type="submit" name="Action" value="@a" class="btn @cls me-2 mb-2">@WorkflowDisplay.ActionName(a)</button>
                     }
                 </div>
             </form>

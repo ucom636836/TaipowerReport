@@ -16,7 +16,7 @@ else
         {
             <tr>
                 <td>@(r.FormNumber[..^1])@r.Revision</td>
-                <td><span class="badge bg-info text-dark">@Pr1Display.StepName(r.Step, r.Status)</span></td>
+                <td><span class="badge bg-info text-dark">@WorkflowDisplay.StepName(r.Step, r.Status)</span></td>
                 <td>@r.PatrolDate.ToString("yyyy-MM-dd")</td>
                 <td>@r.ProjectName</td>
                 <td>@r.ContractorName</td>

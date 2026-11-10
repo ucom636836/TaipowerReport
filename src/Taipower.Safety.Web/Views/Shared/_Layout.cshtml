@@ -34,6 +34,16 @@
                             </ul>
                         </li>
                     }
+                    @if (User.HasFeature(Features.Pr2Create) || User.HasFeature(Features.Pr2Query))
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle @Active("Pr2")" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">工安查核紀錄追蹤表</a>
+                            <ul class="dropdown-menu">
+                                @if (User.HasFeature(Features.Pr2Create)) { <li><a class="dropdown-item" asp-controller="Pr2" asp-action="Create">開單</a></li> }
+                                @if (User.HasFeature(Features.Pr2Query)) { <li><a class="dropdown-item" asp-controller="Pr2" asp-action="Index">查詢</a></li> }
+                            </ul>
+                        </li>
+                    }
                     @if (User.HasFeature(Features.Pr5Create) || User.HasFeature(Features.Pr5Query))
                     {
                         <li class="nav-item dropdown">
