@@ -1,0 +1,109 @@
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Web.Models
+@model Pr5CreateViewModel
+@{
+    ViewData["Title"] = "開立罰單";
+    var projects = (IReadOnlyList<EngineeringProject>)ViewBag.Projects;
+    var contractors = (IReadOnlyList<Contractor>)ViewBag.Contractors;
+    var hazards = (IReadOnlyList<Hazard>)ViewBag.Hazards;
+    var types = (IReadOnlyList<DeficiencyType>)ViewBag.DeficiencyTypes;
+    var items = (IReadOnlyList<DeficiencyItem>)ViewBag.DeficiencyItems;
+}
+<h1 class="h4 mb-3">開立工安缺失改善通知單（罰單）</h1>
+
+@if (Model.SourceFormId is not null)
+{
+    <div class="alert alert-info py-2">本罰單由巡查單 <strong>@Model.SourceFormNumber</strong> 之缺失項連動開立。</div>
+}
+
+<form asp-action="Create" method="post">
+    <div asp-validation-summary="All" class="text-danger small"></div>
+    <input type="hidden" asp-for="Source" />
+    <input type="hidden" asp-for="SourceFormId" />
+    <input type="hidden" asp-for="SourceItemId" />
+    <input type="hidden" asp-for="SourceFormNumber" />
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <label class="form-label">受罰工程</label>
+            <select asp-for="ProjectId" class="form-select">
+                <option value="">請選擇</option>
+                @foreach (var p in projects) { <option value="@p.ProjectId">@p.ProjectNumber @p.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label">承攬商</label>
+            <select asp-for="ContractorId" class="form-select">
+                <option value="">請選擇</option>
+                @foreach (var c in contractors) { <option value="@c.ContractorId">@c.Name</option> }
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">缺失類型</label>
+            <select asp-for="HazardId" class="form-select">
+                <option value="">—</option>
+                @foreach (var h in hazards) { <option value="@h.HazardId">@h.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">缺失種類</label>
+            <select asp-for="DeficiencyTypeId" class="form-select">
+                <option value="">—</option>
+                @foreach (var t in types) { <option value="@t.DeficiencyTypeId">@t.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">缺失項目</label>
+            <select asp-for="DeficiencyItemId" class="form-select">
+                <option value="">—</option>
+                @foreach (var i in items) { <option value="@i.DeficiencyItemId">@i.Name</option> }
+            </select>
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">違規日期</label>
+            <input asp-for="ViolationDate" type="date" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">違規地點</label>
+            <input asp-for="Place" class="form-control" maxlength="100" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">機組 / 期別</label>
+            <input asp-for="UnitPeriod" class="form-control" maxlength="50" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">稽核組別代號</label>
+            <input asp-for="AuditGroupId" class="form-control" maxlength="3" />
+        </div>
+
+        <div class="col-md-3">
+            <label class="form-label">罰款項目代碼</label>
+            <input asp-for="PenaltyItemCode" class="form-control" maxlength="20" placeholder="例如 67-1 / 68 / 69" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">罰款金額 (NT$)</label>
+            <input asp-for="PenaltyAmount" type="number" step="1" min="0" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">改善期限</label>
+            <input asp-for="ImproveDeadline" type="date" class="form-control" />
+        </div>
+
+        <div class="col-12">
+            <label class="form-label">備註（違規當事人 / 說明）</label>
+            <textarea asp-for="Remark" class="form-control" rows="2" maxlength="300"></textarea>
+        </div>
+
+        <div class="col-12 form-check ms-2">
+            <input asp-for="Notify" class="form-check-input" id="notify" />
+            <label class="form-check-label" for="notify">開立後以 email 通知承攬商聯絡人</label>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button type="submit" class="btn btn-primary">開立罰單</button>
+        <a asp-action="Index" class="btn btn-outline-secondary">取消</a>
+    </div>
+</form>

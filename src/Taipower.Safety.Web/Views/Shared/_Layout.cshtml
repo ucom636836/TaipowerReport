@@ -34,6 +34,16 @@
                             </ul>
                         </li>
                     }
+                    @if (User.HasFeature(Features.Pr5Create) || User.HasFeature(Features.Pr5Query))
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle @Active("Pr5")" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">工程罰款管理</a>
+                            <ul class="dropdown-menu">
+                                @if (User.HasFeature(Features.Pr5Create)) { <li><a class="dropdown-item" asp-controller="Pr5" asp-action="Create">開立罰單</a></li> }
+                                @if (User.HasFeature(Features.Pr5Query)) { <li><a class="dropdown-item" asp-controller="Pr5" asp-action="Index">查詢</a></li> }
+                            </ul>
+                        </li>
+                    }
                     @if (User.HasFeature(Features.AdminOrg) || User.HasFeature(Features.AdminEmployee) || User.HasFeature(Features.AdminPermission)
                          || User.HasFeature(Features.AdminReference) || User.HasFeature(Features.AdminAuditLog) || User.HasFeature(Features.AdminRankRole))
                     {

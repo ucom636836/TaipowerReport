@@ -40,6 +40,18 @@
                         @if (it.Verified == true) { <span class="badge bg-success">查證通過</span> }
                         else if (it.Verified == false) { <span class="badge bg-danger">查證未過</span> }
 
+                        @if (it.PenaltyTicketNumber is { Length: > 0 })
+                        {
+                            <div class="mt-1"><span class="badge bg-dark">罰單 @it.PenaltyTicketNumber</span></div>
+                        }
+                        else if (User.HasFeature(Features.Pr5Create))
+                        {
+                            <div class="mt-1">
+                                <a asp-controller="Pr5" asp-action="Create" asp-route-sourceFormId="@f.FormId" asp-route-sourceItemId="@it.ItemId"
+                                   class="btn btn-outline-danger btn-sm">開罰單</a>
+                            </div>
+                        }
+
                         @{ var hasPhotos = it.BeforePhotos.Any() || it.AfterPhotos.Any(); }
                         @if (hasPhotos || Model.CanAct)
                         {

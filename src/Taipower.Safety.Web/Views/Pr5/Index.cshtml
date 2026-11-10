@@ -1,0 +1,64 @@
+@using Taipower.Safety.Core.Forms.Pr5
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Core.Security
+@using Taipower.Safety.Web.Models
+@model IReadOnlyList<Pr5Row>
+@{
+    ViewData["Title"] = "工程罰款管理 - 查詢";
+    var q = (Pr5SearchQuery)ViewBag.Query;
+    var projects = (IReadOnlyList<EngineeringProject>)ViewBag.Projects;
+    var contractors = (IReadOnlyList<Contractor>)ViewBag.Contractors;
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">工程罰款管理 - 罰單查詢</h1>
+    @if (User.HasFeature(Features.Pr5Create))
+    {
+        <a asp-action="Create" class="btn btn-primary btn-sm">開立罰單</a>
+    }
+</div>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select name="ProjectId" class="form-select form-select-sm">
+            <option value="">全部工程</option>
+            @foreach (var p in projects) { <option value="@p.ProjectId" selected="@(p.ProjectId == q.ProjectId)">@p.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="ContractorId" class="form-select form-select-sm">
+            <option value="">全部承攬商</option>
+            @foreach (var c in contractors) { <option value="@c.ContractorId" selected="@(c.ContractorId == q.ContractorId)">@c.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-2">
+        <select name="Status" class="form-select form-select-sm">
+            <option value="">全部狀態</option>
+            @foreach (var s in new[] { Pr5Status.Issued, Pr5Status.Received, Pr5Status.Void })
+            {
+                <option value="@((int)s)" selected="@(q.Status == s)">@Pr5Display.StatusName(s)</option>
+            }
+        </select>
+    </div>
+    <div class="col-md-2"><input type="date" name="From" value="@q.From?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" aria-label="起日" /></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100">查詢</button></div>
+</form>
+<table class="table table-hover align-middle">
+    <thead><tr><th>罰單編號</th><th>狀態</th><th>來源</th><th>工程</th><th>承攬商</th><th>違規日期</th><th class="text-end">罰款金額</th><th>改善期限</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var r in Model)
+    {
+        <tr>
+            <td>@r.PenaltyNumber</td>
+            <td><span class="badge @Pr5Display.StatusCss(r.Status)">@Pr5Display.StatusName(r.Status)</span></td>
+            <td>@Pr5Display.SourceName(r.Source)</td>
+            <td>@r.ProjectName</td>
+            <td>@r.ContractorName</td>
+            <td>@(r.ViolationDate?.ToString("yyyy-MM-dd"))</td>
+            <td class="text-end">@(r.PenaltyAmount is null ? "" : $"{r.PenaltyAmount:#,0}")</td>
+            <td>@(r.ImproveDeadline?.ToString("yyyy-MM-dd"))</td>
+            <td><a asp-action="Detail" asp-route-id="@r.PenaltyId" class="btn btn-link btn-sm">檢視</a></td>
+        </tr>
+    }
+    @if (!Model.Any()) { <tr><td colspan="9" class="text-muted">查無罰單。</td></tr> }
+    </tbody>
+</table>
+<p class="small text-muted">共 @Model.Count 筆</p>

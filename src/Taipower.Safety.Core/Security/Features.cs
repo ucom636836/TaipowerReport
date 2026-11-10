@@ -17,6 +17,10 @@ public static class Features
     public const int Pr1Approve = 108;          // 長官覆核批示
     public const int Pr1Query = 199;            // 查詢
 
+    public const int Pr5 = 200;                 // 工程罰款管理
+    public const int Pr5Create = 201;           // 開立罰單
+    public const int Pr5Query = 299;            // 查詢
+
     public const int Admin = 600;               // 系統管理
     public const int AdminOrg = 601;            // 組織維護
     public const int AdminRankRole = 602;       // 職務角色維護

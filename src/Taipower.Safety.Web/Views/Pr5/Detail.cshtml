@@ -1,0 +1,53 @@
+@using Taipower.Safety.Core.Forms.Pr5
+@using Taipower.Safety.Web.Models
+@model Pr5DetailViewModel
+@{
+    ViewData["Title"] = "罰單 " + Model.Penalty.PenaltyNumber;
+    var p = Model.Penalty;
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">工安缺失改善通知單 <small class="text-muted">@p.PenaltyNumber</small></h1>
+    <span class="badge @Pr5Display.StatusCss(p.Status) fs-6">@Pr5Display.StatusName(p.Status)</span>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-2">來源</dt><dd class="col-sm-4">@Pr5Display.SourceName(p.Source)</dd>
+    <dt class="col-sm-2">受罰工程</dt><dd class="col-sm-4">@Model.Project?.ProjectNumber @Model.Project?.Name</dd>
+    <dt class="col-sm-2">承攬商</dt><dd class="col-sm-4">@Model.Contractor?.Name</dd>
+    <dt class="col-sm-2">違規日期</dt><dd class="col-sm-4">@(p.ViolationDate?.ToString("yyyy-MM-dd") ?? "—")</dd>
+    <dt class="col-sm-2">違規地點</dt><dd class="col-sm-4">@(p.Place ?? "—")</dd>
+    <dt class="col-sm-2">機組/期別</dt><dd class="col-sm-4">@(p.UnitPeriod ?? "—")</dd>
+    <dt class="col-sm-2">罰款項目</dt><dd class="col-sm-4">@(p.PenaltyItemCode ?? "—")</dd>
+    <dt class="col-sm-2">罰款金額</dt><dd class="col-sm-4">@(p.PenaltyAmount is null ? "—" : $"NT$ {p.PenaltyAmount:#,0}")</dd>
+    <dt class="col-sm-2">改善期限</dt><dd class="col-sm-4">@(p.ImproveDeadline?.ToString("yyyy-MM-dd") ?? "—")</dd>
+    <dt class="col-sm-2">通知承攬商</dt><dd class="col-sm-4">@(p.NotifiedAt?.ToString("yyyy-MM-dd HH:mm") ?? "尚未通知")</dd>
+    <dt class="col-sm-2">備註</dt><dd class="col-sm-10">@(p.Remark ?? "—")</dd>
+</dl>
+
+@if (p.Source == Pr5Source.Pr1 && p.SourceFormId is not null)
+{
+    <a asp-controller="Pr1" asp-action="Form" asp-route-id="@p.SourceFormId" class="btn btn-outline-secondary btn-sm mb-3">檢視來源巡查單</a>
+}
+
+@if (Model.CanManage && p.Status != Pr5Status.Void)
+{
+    <div class="card my-3">
+        <div class="card-header">罰單處理</div>
+        <div class="card-body d-flex gap-2 flex-wrap">
+            @if (p.Status == Pr5Status.Issued)
+            {
+                <form asp-action="MarkReceived" asp-route-id="@p.PenaltyId" method="post">
+                    <button type="submit" class="btn btn-success btn-sm">標記已簽收</button>
+                </form>
+            }
+            <form asp-action="Notify" asp-route-id="@p.PenaltyId" method="post">
+                <button type="submit" class="btn btn-outline-primary btn-sm">重寄承攬商通知</button>
+            </form>
+            <form asp-action="Void" asp-route-id="@p.PenaltyId" method="post" onsubmit="return confirm('確定作廢此罰單？');">
+                <button type="submit" class="btn btn-outline-danger btn-sm">作廢</button>
+            </form>
+        </div>
+    </div>
+}
+
+<a asp-action="Index" class="btn btn-outline-secondary btn-sm">回查詢</a>
