@@ -5,6 +5,7 @@ using Taipower.Safety.Core.Common;
 using Taipower.Safety.Core.Forms.Pr1;
 using Taipower.Safety.Core.Forms.Pr2;
 using Taipower.Safety.Core.Forms.Pr3;
+using Taipower.Safety.Core.Forms.Pr4;
 using Taipower.Safety.Core.Forms.Pr5;
 using Taipower.Safety.Core.Forms.Workflow;
 using Taipower.Safety.Core.Reference;
@@ -55,6 +56,14 @@ public static class DependencyInjection
             PublicBaseUrl = () => sp.GetRequiredService<IOptions<EmailOptions>>().Value.PublicBaseUrl,
         });
         services.AddScoped<Pr3Service>();
+
+        services.AddScoped<IPr4AssigneeResolver, Pr4AssigneeResolver>();
+        services.AddScoped<IPr4Repository, Pr4Repository>();
+        services.AddScoped(sp => new Pr4EmailComposer(sp.GetRequiredService<IReferenceRepository>())
+        {
+            PublicBaseUrl = () => sp.GetRequiredService<IOptions<EmailOptions>>().Value.PublicBaseUrl,
+        });
+        services.AddScoped<Pr4Service>();
 
         services.AddScoped<IPr5Repository, Pr5Repository>();
         services.AddScoped<Pr5Service>();

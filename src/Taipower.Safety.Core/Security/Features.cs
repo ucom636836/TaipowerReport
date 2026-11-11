@@ -35,6 +35,12 @@ public static class Features
     public const int Pr3SafetyReview = 224;     // 工安組查證/追蹤
     public const int Pr3Query = 229;            // 查詢
 
+    public const int Pr4 = 230;                 // 承攬商工作場所工安抽查紀錄表
+    public const int Pr4Create = 231;           // 開單（檢驗員）
+    public const int Pr4Inspection = 232;       // 框線一 檢驗員簽核
+    public const int Pr4Handling = 233;         // 框線二 經辦組查證
+    public const int Pr4Query = 239;            // 查詢
+
     public const int Pr5 = 200;                 // 工程罰款管理
     public const int Pr5Create = 201;           // 開立罰單
     public const int Pr5Query = 299;            // 查詢

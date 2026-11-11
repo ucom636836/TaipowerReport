@@ -1,0 +1,50 @@
+@using Taipower.Safety.Core.Forms.Pr4
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Web.Models
+@model IReadOnlyList<Pr4InboxRow>
+@{
+    ViewData["Title"] = "工安抽查紀錄表 - 查詢";
+    var q = (Pr4SearchQuery)ViewBag.Query;
+    var projects = (IReadOnlyList<EngineeringProject>)ViewBag.Projects;
+    var contractors = (IReadOnlyList<Contractor>)ViewBag.Contractors;
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">承攬商工作場所工安抽查紀錄表 - 查詢</h1>
+    @if (User.HasFeature(Taipower.Safety.Core.Security.Features.Pr4Create))
+    {
+        <a asp-action="Create" class="btn btn-primary btn-sm">開單</a>
+    }
+</div>
+<form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+        <select name="ProjectId" class="form-select form-select-sm">
+            <option value="">全部工程</option>
+            @foreach (var p in projects) { <option value="@p.ProjectId" selected="@(p.ProjectId == q.ProjectId)">@p.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select name="ContractorId" class="form-select form-select-sm">
+            <option value="">全部承攬商</option>
+            @foreach (var c in contractors) { <option value="@c.ContractorId" selected="@(c.ContractorId == q.ContractorId)">@c.Name</option> }
+        </select>
+    </div>
+    <div class="col-md-2"><input type="date" name="From" value="@q.From?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" aria-label="起日" /></div>
+    <div class="col-md-2"><input type="date" name="To" value="@q.To?.ToString("yyyy-MM-dd")" class="form-control form-control-sm" aria-label="迄日" /></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary btn-sm w-100">查詢</button></div>
+</form>
+<table class="table table-hover align-middle">
+    <thead><tr><th>單號</th><th>狀態</th><th>抽查日期</th><th>工程</th><th>承攬商</th><th>檢驗員</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var r in Model)
+    {
+        <tr>
+            <td>@(r.FormNumber[..^1])@r.Retimes</td>
+            <td>@Pr4Display.StepName(r.Step, r.Status)</td>
+            <td>@r.SpotCheckDate.ToString("yyyy-MM-dd")</td>
+            <td>@r.ProjectName</td><td>@r.ContractorName</td><td>@r.InspectorName</td>
+            <td><a asp-action="Form" asp-route-id="@r.FormId" class="btn btn-link btn-sm">檢視</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+<p class="small text-muted">共 @Model.Count 筆</p>
