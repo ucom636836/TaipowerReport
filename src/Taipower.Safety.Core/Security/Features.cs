@@ -28,6 +28,13 @@ public static class Features
     public const int Pr2Approve = 218;          // 長官覆核批示
     public const int Pr2Query = 219;            // 查詢
 
+    public const int Pr3 = 220;                 // 各級主管走動管理紀錄暨追蹤表
+    public const int Pr3Create = 221;           // 開單
+    public const int Pr3InspectorConfirm = 222; // 巡查人確認
+    public const int Pr3HandlingReview = 223;   // 經辦組簽註
+    public const int Pr3SafetyReview = 224;     // 工安組查證/追蹤
+    public const int Pr3Query = 229;            // 查詢
+
     public const int Pr5 = 200;                 // 工程罰款管理
     public const int Pr5Create = 201;           // 開立罰單
     public const int Pr5Query = 299;            // 查詢

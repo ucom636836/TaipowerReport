@@ -1,0 +1,111 @@
+@using Taipower.Safety.Core.Forms.Workflow
+@using Taipower.Safety.Core.Forms.Pr3
+@using Taipower.Safety.Web.Models
+@model Pr3FormViewModel
+@{
+    ViewData["Title"] = "走動管理追蹤表 " + Model.Form.DisplayNumber;
+    var f = Model.Form;
+    bool Has(Pr3Action a) => Model.Allowed.Contains(a);
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">各級主管走動管理紀錄暨追蹤表 <small class="text-muted">@f.DisplayNumber</small></h1>
+    <span class="badge bg-info text-dark fs-6">@Pr3Display.StepName(f.Step, f.Status)</span>
+</div>
+
+<dl class="row">
+    <dt class="col-sm-2">巡查人</dt><dd class="col-sm-4">@Model.Inspector?.Name</dd>
+    <dt class="col-sm-2">巡查日期</dt><dd class="col-sm-4">@f.InspectDate.ToString("yyyy-MM-dd") @f.InspectTime</dd>
+    <dt class="col-sm-2">工程</dt><dd class="col-sm-4">@Model.Project?.ProjectNumber @Model.Project?.Name</dd>
+    <dt class="col-sm-2">承攬商</dt><dd class="col-sm-4">@Model.Contractor?.Name</dd>
+    <dt class="col-sm-2">巡查地點</dt><dd class="col-sm-4">@(f.Location ?? "—")</dd>
+    <dt class="col-sm-2">受巡人數/設備</dt><dd class="col-sm-4">@(f.Target ?? "—")</dd>
+    <dt class="col-sm-2">會同人員</dt><dd class="col-sm-4">@(f.Attendants ?? "—")</dd>
+    <dt class="col-sm-2">限期改善日</dt><dd class="col-sm-4">@(f.ImproveDeadline?.ToString("yyyy-MM-dd") ?? "—")</dd>
+    @if (f.Archive > 0)
+    {
+        <dt class="col-sm-2">持續追蹤</dt><dd class="col-sm-4">第 @f.Archive 次迴圈</dd>
+    }
+</dl>
+
+@foreach (var (title, items, isCon) in new[] { ("優點", Model.Pros, false), ("缺點", Model.Cons, true), ("建議改善事項", Model.Recommends, false) })
+{
+    <h2 class="h6 mt-3">@title</h2>
+    <table class="table table-sm table-bordered">
+        <thead><tr><th style="width:3rem">#</th><th>敘述</th>@if (isCon){<th>危害類型</th>}</tr></thead>
+        <tbody>
+        @foreach (var it in items)
+        {
+            <tr>
+                <td>@it.Ordinal</td>
+                <td>@it.Description</td>
+                @if (isCon) { <td>@it.HazardLabel</td> }
+            </tr>
+        }
+        @if (!items.Any()) { <tr><td colspan="@(isCon ? 3 : 2)" class="text-muted">無</td></tr> }
+        </tbody>
+    </table>
+}
+
+@if (Model.CanAct)
+{
+    <div class="card my-4">
+        <div class="card-header">簽核處理</div>
+        <div class="card-body">
+            <form asp-action="Act" method="post" class="row g-3">
+                <input type="hidden" name="FormId" value="@f.FormId" />
+
+                @if (Has(Pr3Action.AssignChief) || Has(Pr3Action.AssignOfficer))
+                {
+                    <div class="col-md-6">
+                        <label class="form-label">指派對象（員工代號）</label>
+                        <input name="AssigneeId" class="form-control" placeholder="例如 610826" />
+                    </div>
+                }
+                @if (f.Step.Position == Position.Officer)
+                {
+                    <div class="col-12 form-check ms-2">
+                        <input type="checkbox" name="IsJump" value="true" class="form-check-input" id="jump" />
+                        <label class="form-check-label" for="jump">跳關直送經理（略過課長）</label>
+                    </div>
+                }
+                @if (Has(Pr3Action.ContinueTracking) || Has(Pr3Action.Close))
+                {
+                    <div class="col-12">
+                        <div class="alert alert-light border mb-0 small">工安組查證完成後：選擇「<strong>結案</strong>」完成本單，或「<strong>持續追蹤</strong>」退回經辦組續辦（迴圈 +1）。</div>
+                    </div>
+                }
+
+                <div class="col-12">
+                    <label class="form-label">意見 / 批示</label>
+                    <textarea name="Comment" class="form-control" rows="2" maxlength="1000"></textarea>
+                </div>
+                <div class="col-12">
+                    @foreach (var a in Model.Allowed.Where(a => a != Pr3Action.Withdraw))
+                    {
+                        var cls = a is Pr3Action.Close ? "btn-success"
+                            : a is Pr3Action.ContinueTracking ? "btn-warning"
+                            : a.ToString().StartsWith("Return") ? "btn-outline-danger"
+                            : "btn-primary";
+                        <button type="submit" name="Action" value="@a" class="btn @cls me-2 mb-2">@Pr3Display.ActionName(a)</button>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+}
+else if (f.Status == FormStatus.InProgress)
+{
+    <div class="alert alert-secondary">此單目前由 <strong>@(f.PendingRecipientId ?? "—")</strong> 處理中，您僅能檢視。</div>
+}
+
+<h2 class="h6 mt-4">簽核歷程</h2>
+<table class="table table-sm table-striped small">
+    <thead><tr><th>時間</th><th>處理人</th><th>動作</th><th>意見</th></tr></thead>
+    <tbody>
+    @foreach (var h in Model.History)
+    {
+        <tr><td class="text-nowrap">@h.OccurredAt.ToString("yyyy-MM-dd HH:mm")</td><td>@h.ActorTitle</td><td>@h.Action</td><td>@h.Comment</td></tr>
+    }
+    </tbody>
+</table>
+<a asp-action="Index" class="btn btn-outline-secondary btn-sm">回查詢</a>

@@ -1,0 +1,98 @@
+@using Taipower.Safety.Core.Org
+@using Taipower.Safety.Core.Reference
+@using Taipower.Safety.Web.Models
+@model Taipower.Safety.Web.Models.Pr3CreateViewModel
+@{
+    ViewData["Title"] = "走動管理追蹤表 - 開單";
+    var projects = (IReadOnlyList<EngineeringProject>)ViewBag.Projects;
+    var contractors = (IReadOnlyList<Contractor>)ViewBag.Contractors;
+    var groups = (IReadOnlyList<OrgGroup>)ViewBag.Groups;
+    var inspectors = (IReadOnlyList<Employee>)ViewBag.Inspectors;
+    var hazards = (IReadOnlyList<Hazard>)ViewBag.Hazards;
+}
+<h1 class="h4 mb-3">各級主管走動管理紀錄暨追蹤表 - 開單</h1>
+<form asp-action="Create" method="post">
+    <div asp-validation-summary="All" class="alert alert-danger py-2" role="alert"></div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <label asp-for="InspectorId" class="form-label">巡查人</label>
+            <select asp-for="InspectorId" class="form-select">
+                <option value="">請選擇</option>
+                @foreach (var e in inspectors) { <option value="@e.EmployeeId">@e.Name（@e.RankName）</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="InspectDate" class="form-label">巡查日期</label>
+            <input asp-for="InspectDate" type="date" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label asp-for="InspectTime" class="form-label">巡查時間</label>
+            <input asp-for="InspectTime" class="form-control" placeholder="例如 14:00" maxlength="20" />
+        </div>
+        <div class="col-md-3">
+            <label asp-for="GroupId" class="form-label">辦理組別</label>
+            <select asp-for="GroupId" class="form-select">
+                <option value="">請選擇</option>
+                @foreach (var g in groups) { <option value="@g.GroupId">@g.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ProjectId" class="form-label">受查工程</label>
+            <select asp-for="ProjectId" class="form-select" id="ProjectId">
+                <option value="">請選擇</option>
+                @foreach (var p in projects) { <option value="@p.ProjectId">@p.ProjectNumber @p.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ContractorId" class="form-label">受巡承攬商</label>
+            <select asp-for="ContractorId" class="form-select" id="ContractorId">
+                <option value="">請先選工程</option>
+                @foreach (var c in contractors) { <option value="@c.ContractorId">@c.Name</option> }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label asp-for="ImproveDeadline" class="form-label">限期改善日（選填）</label>
+            <input asp-for="ImproveDeadline" type="date" class="form-control" />
+        </div>
+        <div class="col-md-3">
+            <label asp-for="Location" class="form-label">巡查地點</label>
+            <input asp-for="Location" class="form-control" maxlength="200" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="Attendants" class="form-label">會同人員</label>
+            <input asp-for="Attendants" class="form-control" maxlength="200" />
+        </div>
+        <div class="col-md-6">
+            <label asp-for="Target" class="form-label">受巡人數 / 設備</label>
+            <input asp-for="Target" class="form-control" maxlength="200" />
+        </div>
+    </div>
+
+    @await Html.PartialAsync("_Pr3ItemEditor", ("Pros", "優點", (IEnumerable<Pr3ItemInput>)Model.Pros, hazards, false))
+    @await Html.PartialAsync("_Pr3ItemEditor", ("Cons", "缺點", (IEnumerable<Pr3ItemInput>)Model.Cons, hazards, true))
+    @await Html.PartialAsync("_Pr3ItemEditor", ("Recommends", "建議改善事項", (IEnumerable<Pr3ItemInput>)Model.Recommends, hazards, false))
+
+    <button type="submit" class="btn btn-primary">送出建單</button>
+    <a asp-action="Index" class="btn btn-outline-secondary">取消</a>
+</form>
+@section Scripts {
+<script>
+    document.getElementById('ProjectId').addEventListener('change', async function () {
+        var sel = document.getElementById('ContractorId');
+        sel.innerHTML = '<option value="">載入中…</option>';
+        if (!this.value) { sel.innerHTML = '<option value="">請先選工程</option>'; return; }
+        var res = await fetch('@Url.Action("Contractors")?projectId=' + encodeURIComponent(this.value));
+        var list = await res.json();
+        sel.innerHTML = '<option value="">請選擇</option>' + list.map(c => '<option value="' + c.contractorId + '">' + c.name + '</option>').join('');
+    });
+    document.querySelectorAll('[data-add-row]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var body = document.querySelector('[data-rows="' + btn.dataset.addRow + '"]');
+            var tpl = body.querySelector('template').content.cloneNode(true);
+            var idx = body.querySelectorAll('[data-row]').length;
+            tpl.querySelectorAll('[name]').forEach(function (el) { el.name = el.name.replace('__i__', idx); });
+            body.appendChild(tpl);
+        });
+    });
+</script>
+}

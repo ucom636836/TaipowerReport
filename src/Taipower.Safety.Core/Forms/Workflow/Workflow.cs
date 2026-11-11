@@ -27,6 +27,8 @@ public enum Position
     DeputyEng = 6,      // 工程副處長
     DeputySafety = 7,   // 工安副處長
     Director = 8,       // 處長
+    // Pr3 走動管理：起單後的巡查人確認關
+    Inspector = 10,     // 巡查人 (Pr3 Pr3_Iman)
 }
 
 /// <summary>流轉狀態。Working = 持有人開啟中；Submitted = 已送出待收件人。</summary>

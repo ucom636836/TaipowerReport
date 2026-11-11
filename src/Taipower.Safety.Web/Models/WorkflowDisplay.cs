@@ -26,6 +26,7 @@ public static class WorkflowDisplay
         Position.DeputyEng => "工程副處長",
         Position.DeputySafety => "工安副處長",
         Position.Director => "處長",
+        Position.Inspector => "巡查人",
         _ => p.ToString(),
     };
 

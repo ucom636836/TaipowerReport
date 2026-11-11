@@ -44,6 +44,16 @@
                             </ul>
                         </li>
                     }
+                    @if (User.HasFeature(Features.Pr3Create) || User.HasFeature(Features.Pr3Query))
+                    {
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle @Active("Pr3")" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">走動管理追蹤表</a>
+                            <ul class="dropdown-menu">
+                                @if (User.HasFeature(Features.Pr3Create)) { <li><a class="dropdown-item" asp-controller="Pr3" asp-action="Create">開單</a></li> }
+                                @if (User.HasFeature(Features.Pr3Query)) { <li><a class="dropdown-item" asp-controller="Pr3" asp-action="Index">查詢</a></li> }
+                            </ul>
+                        </li>
+                    }
                     @if (User.HasFeature(Features.Pr5Create) || User.HasFeature(Features.Pr5Query))
                     {
                         <li class="nav-item dropdown">
